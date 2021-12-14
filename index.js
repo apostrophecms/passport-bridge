@@ -401,7 +401,7 @@ module.exports = {
     return {
       loginLinks() {
         // TODO A3 BETA contextReq?
-        const contextReq = self.apos.templates.contextReq;
+        const contextReq = self.apos.template.contextReq;
         return self.options.strategies.map(spec => {
           let href = self.getLoginUrl(spec, true);
           if (self.apos.i18n.locales.length > 1) {
