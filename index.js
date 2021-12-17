@@ -284,8 +284,7 @@ module.exports = {
   },
   handlers(self) {
     return {
-      // TODO A3 BETA guessing at this event name
-      'login:after': {
+      '@apostrophecms/login:after': {
         async redirectToNewLocale(req) {
           if (!req.session.passportLocale) {
             return;
