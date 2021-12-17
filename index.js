@@ -34,7 +34,7 @@ module.exports = {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
             // sensibly. But we can do it by making a dummy strategy object now
-            var dummy = new Strategy(Object.assign(
+            const dummy = new Strategy(Object.assign(
               {
                 callbackURL: 'https://dummy/test'
               },
@@ -92,19 +92,16 @@ module.exports = {
       // Redirect users to this URL to start the process of logging them in via each strategy
       addLoginRoute(spec) {
         self.apos.app.get(self.getLoginUrl(spec), (req, res) => {
-          if (req.query.newLocale) {
-            // TODO A3 BETA passportWorkflow?
-            req.session.passportWorkflow = {
-              oldLocale: req.query.oldLocale,
-              newLocale: req.query.newLocale,
-              oldSlug: req.query.oldSlug
-            };
-            return res.redirect(self.apos.url.build(req.url, {
-              newLocale: null,
-              oldLocale: null,
-              oldSlug: null
-            }));
-          }
+          req.session.passportLocale = {
+            oldLocale: req.query.oldLocale,
+            newLocale: req.query.newLocale,
+            oldSlug: req.query.oldSlug
+          };
+          return res.redirect(self.apos.url.build(req.url, {
+            newLocale: null,
+            oldLocale: null,
+            oldSlug: null
+          }));
         }, self.apos.login.passport.authenticate(spec.name, spec.authenticate));
       },
 
@@ -125,12 +122,7 @@ module.exports = {
 
       addFailureRoute(spec) {
         self.apos.app.get(self.getFailureUrl(spec), function (req, res) {
-          // TODO A3 BETA this description suggests BC cleanup at the A2 level,
-          // is there anything to clean up for A3?
-
-          // Gets i18n'd in the template, also bc with what templates that tried to work
-          // before certain fixes would expect (this is why we still pass a string and not
-          // a flag, and why we call it `message`)
+          // Gets i18n'd in the template
           return self.sendPage(req, 'error', {
             spec: spec,
             message: 'Your credentials were not accepted, your account is not affiliated with this site, or an existing account has the same username or email address.'
@@ -146,14 +138,12 @@ module.exports = {
       // an oauth passport callback function to find the user based
       // on the profile, creating them if appropriate.
 
-      // TODO A3 BETA unsure how to convert this fn
-      // CURRENTLY COMPLETELY UNTOUCHED
       findOrCreateUser(spec) {
 
         return function(accessToken, refreshToken, profile, callback) {
-          var req = self.apos.tasks.getReq();
-          var criteria = {};
-          var emails;
+          const req = self.apos.task.getReq();
+          let criteria = {};
+          let emails;
 
           if (spec.accept) {
             if (!spec.accept(profile)) {
@@ -173,16 +163,15 @@ module.exports = {
           } else {
             switch (spec.match || 'username') {
               case 'id':
-              criteria = {};
               if (!profile.id) {
-                console.error('apostrophe-passport: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
+                console.error('@apostrophecms/passport: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
                 return callback(null, false);
               }
               criteria[spec.name + 'Id'] = profile.id;
               break;
               case 'username':
               if (!profile.username) {
-                console.error('apostrophe-passport: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
+                console.error('@apostrophecms/passport: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
                 return callback(null, false);
               }
               criteria.username = profile.username;
@@ -193,35 +182,29 @@ module.exports = {
                 // User has no email
                 return callback(null, false);
               }
-              criteria.$or = _.map(emails, function(email) {
-                return { email: email };
-              });
+              criteria.$or = emails.map(email => {
+                return { email }
+              })
               break;
               default:
-              return callback(new Error('apostrophe-passport: ' + spec.match + ' is not a supported value for the match property'));
+              return callback(new Error(`@apostrophecms/passport: ${spec.match} is not a supported value for the match property`));
             }
           }
           criteria.disabled = { $ne: true };
-          return self.apos.users.find(req, criteria).toObject(function(err, user) {
-            if (err) {
-              return callback(err);
-            }
+
+          const user = await self.apos.user.find(req, criteria).toObject();
+
+          try {
             if (user) {
-              return callback(null, user);
+              return user;
             }
             if (!self.options.create) {
-              return callback(null, false);
+              return false;
             }
-            return self.createUser(spec, profile, function(err, user) {
-              if (err) {
-                // Typically a duplicate key, not surprising with username and
-                // email address duplication possibilities when we're matching
-                // on the other field, treat it as a login error
-                return callback(null, false);
-              }
-              return callback(null, user);
-            });
-          });
+            return await createUser(spec, profile);
+          } catch (err) {
+            throw self.apos.error('user', err);
+          }
         };
       },
 
@@ -256,20 +239,20 @@ module.exports = {
       // Create a new user based on a profile. This occurs only
       // if the "create" option is set and a user arrives who has
       // a valid passport profile but does not exist in the local database.
-      createUser(spec, profile) {
+      async createUser(spec, profile) {
         const user = self.apos.user.newInstance();
+        user.role = await self.userRole();
         user.username = profile.username;
         user.title = profile.displayName || profile.username || '';
         user[spec.name + 'Id'] = profile.id;
         if (!user.username) {
           user.username = self.apos.util.slugify(user.title);
         }
-        var emails = self.getRelevantEmailsFromProfile(spec, profile);
+        const emails = self.getRelevantEmailsFromProfile(spec, profile);
         if (emails.length) {
           user.email = emails[0];
         }
         if (profile.name) {
-          // TODO A3 BETA givenName?
           user.firstName = profile.name.givenName;
           if (profile.name.middleName) {
             user.firstName += ' ' + profile.name.middleName;
@@ -284,30 +267,19 @@ module.exports = {
           user.lastName = parsedName.lastName;
         }
         const req = self.apos.task.getReq();
-        // TODO A3 BETA no createGroup?
-        if (self.createGroup) {
-          user.groupIds = [ self.createGroup._id ];
-        }
         if (spec.import) {
           // Allow for specialized import of more fields
           spec.import(profile, user);
         }
-        return self.apos.user.insert(req, user);
+        await self.apos.user.insert(req, user);
+        return user;
+      },
+
+      // Overridable method for determining the default role
+      // of newly created users.
+      async userRole() {
+        return 'guest';
       }
-
-      // Ensure the existence of an apostrophe-group for newly
-      // created users, as configured via the `group` subproperty
-      // of the `create` option.
-
-      // ensureGroup(callback) {
-      //   if (!(self.options.create && self.options.create.group)) {
-      //     return setImmediate(callback);
-      //   }
-      //   return self.apos.users.ensureGroup(self.options.create.group, function(err, group) {
-      //     self.createGroup = group;
-      //     return callback(err);
-      //   });
-      // }
     };
   },
   handlers(self) {
@@ -315,29 +287,26 @@ module.exports = {
       // TODO A3 BETA guessing at this event name
       'login:after': {
         async redirectToNewLocale(req) {
-          if (!req.session.passportWorkflow) {
+          if (!req.session.passportLocale) {
             return;
           }
+          const i18n = self.apos.i18n;
           const {
             oldLocale,
             newLocale,
             oldSlug
-          } = req.session.passportWorkflow;
-          delete req.session.passportWorkflow;
+          } = req.session.passportLocale;
+          delete req.session.passportLocale;
           const crossDomainSessionToken = self.apos.util.generateId();
-          // TODO A3 BETA self.apos.workflow.crossDomainSessionCache.set doesn't exist ⬇︎
-          await self.apos.workflow.crossDomainSessionCache.set(crossDomainSessionToken, JSON.stringify(req.session), 60 * 60);
+          await self.apos.cache.set('@apostrophecms/i18n:cross-domain-sessions', crossDomainSessionToken, req.session, 60 * 60);
           req.user = await self.apos.login.deserializeUser(req.user._id);
           let doc = await self.apos.doc.find(req, {
             slug: oldSlug
-          // TODO A3 BETA equivalent to workflowLocale(oldLocale)? ⬇︎
-          }).workflowLocale(oldLocale).relationships(false).areas(false).toObject();
-          // TODO A3 BETA what is the equivalent of workflowGuid? ⬇︎
-          if (doc && doc.workflowGuid) {
+          }).locale(oldLocale).relationships(false).areas(false).toObject();
+          if (doc && doc.aposDocId) {
             doc = await self.apos.doc.find(req, {
-              workflowGuid: doc.workflowGuid
-            // TODO A3 BETA equivalent to workflowLocale(newLocale)? ⬇︎
-            }).workflowLocale(newLocale).toObject();
+              aposDocId: doc.aposDocId
+            }).locale(newLocale).toObject();
           }
 
           let slug;
@@ -346,20 +315,19 @@ module.exports = {
           } else {
             // Fall back to home page
             slug = '/';
-            // TODO A3 BETA correct way to match prefixes in A3? ⬇︎
-            if (workflow.options.prefixes && workflow.options.prefixes[newLocale]) {
-              slug = workflow.options.prefixes[newLocale] + '/';
+            if (i18n.locales[newLocale] && i18n.locales[newLocale].prefix) {
+              slug = i18n.locales[newLocale].prefix + '/';
             }
           }
-          let url = self.apos.url.build(workflow.action + '/link-to-locale', {
+          let url = self.apos.url.build(i18n.action + '/link-to-locale', {
             slug,
             newLocale,
-            // TODO A3 BETA bad name? workflowCrossDomainSessionToken ⬇︎
-            workflowCrossDomainSessionToken: crossDomainSessionToken,
-            // TODO A3 BETA doesn't take a callback? ⬇︎
+            crossDomainSessionToken,
             cb: Math.random().toString().replace('.', '')
           });
           // TODO A3 BETA is self.apos.i18n.hostnamesInUse the equivalent here?
+          console.log(i18n.locales)
+          console.log(i18n.hostnamesInUse)
           if (workflow.hostnames && workflow.hostnames[newLocale]) {
             const oldLocale = req.locale;
             req.locale = newLocale;
@@ -396,30 +364,38 @@ module.exports = {
       }
     };
   },
-
-  helpers(self, options) {
+  components(self) {
     return {
-      loginLinks() {
-        // TODO A3 BETA contextReq?
-        const contextReq = self.apos.template.contextReq;
-        return self.options.strategies.map(spec => {
-          let href = self.getLoginUrl(spec, true);
-          if (self.apos.i18n.locales.length > 1) {
-            href = self.apos.urls.build(href, {
-              oldLocale: contextReq.locale,
-              // TODO A3 BETA equivalent of liveify?
-              newLocale: workflow.liveify(contextReq.locale),
-              // TODO A3 BETA A3 equivalent?
-              oldSlug: workflow.getContext(contextReq) && workflow.getContext(contextReq).slug
-            });
-          }
-          return {
-            name: spec.name,
-            label: spec.label,
-            href
-          };
-        });
+      loginLinks(req, data) {
+        return {
+          links: self.options.strategies.map(spec => {
+            let href = self.getLoginUrl(spec, true);
+            if (self.apos.i18n.locales.length > 1) {
+              href = self.apos.url.build(href, {
+                oldLocale: req.locale,
+                newLocale: req.locale.replace(':draft', ':published'),
+                // TODO A3 PORT req.slug is wrong here
+                oldSlug: req.slug
+              });
+            }
+            return {
+              name: spec.name,
+              label: spec.label,
+              href
+            };
+          })
+        };
       }
     };
-  }
+  },
+
+  // helpers(self, options) {
+  //   return {
+  //     loginLinks() {
+  //       // TODO A3 BETA contextReq?
+  //       const contextReq = self.apos.template.contextReq;
+
+  //     }
+  //   };
+  // }
 };
