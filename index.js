@@ -386,15 +386,5 @@ module.exports = {
         };
       }
     };
-  },
-
-  // helpers(self, options) {
-  //   return {
-  //     loginLinks() {
-  //       // TODO A3 BETA contextReq?
-  //       const contextReq = self.apos.template.contextReq;
-
-  //     }
-  //   };
-  // }
+  }
 };
