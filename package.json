@@ -1,5 +1,5 @@
 {
-  "name": "@apostrophecms/passport",
+  "name": "@apostrophecms/passport-bridge",
   "version": "1.0.0",
   "description": "Passport.js authentication for Apostrophe",
   "main": "index.js",
@@ -10,9 +10,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/apostrophecms/passport.git"
+    "url": "git+https://github.com/apostrophecms/passport-bridge.git"
   },
-  "homepage": "https://github.com/apostrophecms/passport#readme",
+  "homepage": "https://github.com/apostrophecms/passport-bridge#readme",
   "author": "Apostrophe Technologies",
   "license": "MIT",
   "devDependencies": {

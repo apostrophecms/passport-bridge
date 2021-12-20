@@ -7,10 +7,10 @@ module.exports = {
       enablePassportStrategies() {
         self.strategies = {};
         if (!self.apos.baseUrl) {
-          throw new Error('@apostrophecms/passport: you must configure the top-level "baseUrl" option for apostrophe');
+          throw new Error('@apostrophecms/passport-bridge: you must configure the top-level "baseUrl" option for apostrophe');
         }
         if (!Array.isArray(self.options.strategies)) {
-          throw new Error('@apostrophecms/passport: you must configure the "strategies" option');
+          throw new Error('@apostrophecms/passport-bridge: you must configure the "strategies" option');
         }
 
         self.options.strategies.forEach(spec => {
@@ -164,14 +164,14 @@ module.exports = {
             switch (spec.match || 'username') {
               case 'id':
               if (!profile.id) {
-                console.error('@apostrophecms/passport: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
+                console.error('@apostrophecms/passport-bridge: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
                 return callback(null, false);
               }
               criteria[spec.name + 'Id'] = profile.id;
               break;
               case 'username':
               if (!profile.username) {
-                console.error('@apostrophecms/passport: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
+                console.error('@apostrophecms/passport-bridge: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
                 return callback(null, false);
               }
               criteria.username = profile.username;
@@ -187,7 +187,7 @@ module.exports = {
               })
               break;
               default:
-              return callback(new Error(`@apostrophecms/passport: ${spec.match} is not a supported value for the match property`));
+              return callback(new Error(`@apostrophecms/passport-bridge: ${spec.match} is not a supported value for the match property`));
             }
           }
           criteria.disabled = { $ne: true };
