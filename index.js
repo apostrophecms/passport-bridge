@@ -21,7 +21,7 @@ module.exports = {
             Strategy = spec.Strategy;
           }
           if (!Strategy) {
-            throw new Error('apostrophe-login-auth: each strategy must have a "module" setting\n' +
+            throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
               'giving the name of an npm module installed in your project that\n' +
               'is passport-oauth2, passport-oauth or a subclass with a compatible\n' +
               'interface, such as passport-gitlab2, passport-twitter, etc.\n\n' +
