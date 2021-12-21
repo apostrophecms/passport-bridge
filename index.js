@@ -88,12 +88,12 @@ module.exports = {
             req.session.passportLocale = {
               oldLocale: req.query.oldLocale,
               newLocale: req.query.newLocale,
-              oldSlug: req.query.oldSlug
+              oldAposDocId: req.query.oldAposDocId
             };
             return res.redirect(self.apos.url.build(req.url, {
               newLocale: null,
               oldLocale: null,
-              oldSlug: null
+              oldAposDocId: null
             }));
           } else {
             return next();
@@ -111,11 +111,13 @@ module.exports = {
               failureRedirect: self.getFailureUrl(spec)
             }
           ),
-          // actual route (soon we need more nuanced behavior after login
-          // in general in A3, which always sends you home right now for
-          // direct login too)
+          // The actual route reached after authentication redirects
+          // appropriately, either to an explicitly requested location
+          // or the home page
           (req, res) => {
-            return res.redirect('/');
+            const redirect = req.session.passportRedirect || '/';
+            delete req.session.passportRedirect;
+            return res.rawRedirect(redirect);
           }
         );
       },
@@ -285,54 +287,44 @@ module.exports = {
           const {
             oldLocale,
             newLocale,
-            oldSlug
+            oldAposDocId
           } = req.session.passportLocale;
           delete req.session.passportLocale;
           const crossDomainSessionToken = self.apos.util.generateId();
           await self.apos.cache.set('@apostrophecms/i18n:cross-domain-sessions', crossDomainSessionToken, req.session, 60 * 60);
-          req.user = await self.apos.login.deserializeUser(req.user._id);
           let doc = await self.apos.doc.find(req, {
-            slug: oldSlug
-          }).locale(oldLocale).relationships(false).areas(false).toObject();
+            aposDocId: oldAposDocId
+          }).locale(`${oldLocale}:draft`).relationships(false).areas(false).toObject();
           if (doc && doc.aposDocId) {
             doc = await self.apos.doc.find(req, {
               aposDocId: doc.aposDocId
-            }).locale(newLocale).toObject();
+            }).locale(`${newLocale}:draft`).toObject();
           }
-
-          let slug;
+          let route;
           if (doc) {
-            slug = doc.slug;
+            const action = self.apos.page.isPage(doc) ? self.apos.page.action : self.apos.doc.getManager(doc).action;
+            route = `${action}/${doc._id}/locale/${newLocale}`;
           } else {
-            // Fall back to home page
-            slug = '/';
+            // Fall back to home page, with appropriate prefix
+            route = '/';
             if (i18n.locales[newLocale] && i18n.locales[newLocale].prefix) {
-              slug = i18n.locales[newLocale].prefix + '/';
+              route = i18n.locales[newLocale].prefix + '/';
             }
           }
-          let url = self.apos.url.build(i18n.action + '/link-to-locale', {
-            slug,
-            newLocale,
-            crossDomainSessionToken,
-            cb: Math.random().toString().replace('.', '')
+
+          let url = self.apos.url.build(route, {
+            aposLocale: req.oldLocale,
+            aposCrossDomainSessionToken: crossDomainSessionToken
           });
-          // TODO A3 BETA is self.apos.i18n.hostnamesInUse the equivalent here?
-          console.log(i18n.locales)
-          console.log(i18n.hostnamesInUse)
-          if (workflow.hostnames && workflow.hostnames[newLocale]) {
+
+          if (i18n.locales[newLocale] && i18n.locales[newLocale].hostname) {
             const oldLocale = req.locale;
+            // Force use of correct hostname for new locale
             req.locale = newLocale;
             url = self.apos.page.getBaseUrl(req) + url;
             req.locale = oldLocale;
           }
-          if (url.match(/^https?:/)) {
-            req.redirect = url;
-          } else {
-            // Because any sitewide prefix will already be added
-            // by res.redirect() as patched by apostrophe and invoked
-            // by the afterLogin handler
-            req.redirect = url.replace(self.apos.prefix, '');
-          }
+          req.session.passportRedirect = url;
         }
       },
       'apostrophe:modulesRegistered': {
@@ -370,12 +362,12 @@ module.exports = {
         return {
           links: self.options.strategies.map(spec => {
             let href = self.getLoginUrl(spec, true);
-            if (self.apos.i18n.locales.length > 1) {
+            if (Object.keys(self.apos.i18n.locales).length > 1) {
+              const context = req.data.piece || req.data.page;
               href = self.apos.url.build(href, {
                 oldLocale: req.locale,
                 newLocale: req.locale.replace(':draft', ':published'),
-                // TODO A3 PORT req.slug is wrong here
-                oldSlug: req.slug
+                oldAposDocId: (context && context.aposDocId)
               });
             }
             return {
