@@ -14,12 +14,7 @@ module.exports = {
         }
 
         self.options.strategies.forEach(spec => {
-          var Strategy;
-          if (spec.module) {
-            Strategy = self.apos.root.require(spec.module);
-          } else {
-            Strategy = spec.Strategy;
-          }
+          const Strategy = spec.module ? self.apos.root.require(spec.module) : spec.Strategy;
           if (!Strategy) {
             throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
               'giving the name of an npm module installed in your project that\n' +
@@ -46,9 +41,6 @@ module.exports = {
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
           self.strategies[spec.name] = new Strategy(spec.options, self.findOrCreateUser(spec));
           self.apos.login.passport.use(self.strategies[spec.name]);
-          self.addLoginRoute(spec);
-          self.addCallbackRoute(spec);
-          self.addFailureRoute(spec);
         });
       },
 
@@ -91,17 +83,21 @@ module.exports = {
       //
       // Redirect users to this URL to start the process of logging them in via each strategy
       addLoginRoute(spec) {
-        self.apos.app.get(self.getLoginUrl(spec), (req, res) => {
-          req.session.passportLocale = {
-            oldLocale: req.query.oldLocale,
-            newLocale: req.query.newLocale,
-            oldSlug: req.query.oldSlug
-          };
-          return res.redirect(self.apos.url.build(req.url, {
-            newLocale: null,
-            oldLocale: null,
-            oldSlug: null
-          }));
+        self.apos.app.get(self.getLoginUrl(spec), (req, res, next) => {
+          if (req.query.newLocale) {
+            req.session.passportLocale = {
+              oldLocale: req.query.oldLocale,
+              newLocale: req.query.newLocale,
+              oldSlug: req.query.oldSlug
+            };
+            return res.redirect(self.apos.url.build(req.url, {
+              newLocale: null,
+              oldLocale: null,
+              oldSlug: null
+            }));
+          } else {
+            return next();
+          }
         }, self.apos.login.passport.authenticate(spec.name, spec.authenticate));
       },
 
@@ -115,8 +111,12 @@ module.exports = {
               failureRedirect: self.getFailureUrl(spec)
             }
           ),
-          // actual route
-          self.apos.login.afterLogin
+          // actual route (soon we need more nuanced behavior after login
+          // in general in A3, which always sends you home right now for
+          // direct login too)
+          (req, res) => {
+            return res.redirect('/');
+          }
         );
       },
 
@@ -139,8 +139,7 @@ module.exports = {
       // on the profile, creating them if appropriate.
 
       findOrCreateUser(spec) {
-
-        return function(accessToken, refreshToken, profile, callback) {
+        return async function(accessToken, refreshToken, profile, callback) {
           const req = self.apos.task.getReq();
           let criteria = {};
           let emails;
@@ -191,19 +190,12 @@ module.exports = {
             }
           }
           criteria.disabled = { $ne: true };
-
-          const user = await self.apos.user.find(req, criteria).toObject();
-
           try {
-            if (user) {
-              return user;
-            }
-            if (!self.options.create) {
-              return false;
-            }
-            return await createUser(spec, profile);
+            const user = await self.apos.user.find(req, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
+            return callback(null, user || false);
           } catch (err) {
-            throw self.apos.error('user', err);
+            self.apos.util.error(err);
+            return callback(err);
           }
         };
       },
@@ -278,7 +270,7 @@ module.exports = {
       // Overridable method for determining the default role
       // of newly created users.
       async userRole() {
-        return 'guest';
+        return (self.options.create && self.options.create.role) || 'guest';
       }
     };
   },
@@ -341,6 +333,15 @@ module.exports = {
             // by the afterLogin handler
             req.redirect = url.replace(self.apos.prefix, '');
           }
+        }
+      },
+      'apostrophe:modulesRegistered': {
+        addRoutes() {
+          self.options.strategies.forEach(spec => {
+            self.addLoginRoute(spec);
+            self.addCallbackRoute(spec);
+            self.addFailureRoute(spec);
+          });
         }
       }
     };
