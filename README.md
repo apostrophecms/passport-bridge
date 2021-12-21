@@ -26,6 +26,7 @@ To install the module, use the command line to run this command in an Apostrophe
 
 ```
 npm install @apostrophecms/passport-bridge
+# Just an example — you can use many strategy modules
 npm install --save passport-google-oauth20
 ```
 
