@@ -1,3 +1,5 @@
+const humanname = require('humanname');
+
 module.exports = {
   init(self) {
     self.enablePassportStrategies();
@@ -149,7 +151,6 @@ module.exports = {
         return async function(accessToken, refreshToken, profile, callback) {
           const req = self.apos.task.getReq();
           let criteria = {};
-          let emails;
 
           if (spec.accept) {
             if (!spec.accept(profile)) {
@@ -157,7 +158,7 @@ module.exports = {
             }
           }
 
-          emails = self.getRelevantEmailsFromProfile(spec, profile);
+          const emails = self.getRelevantEmailsFromProfile(spec, profile);
           if (spec.emailDomain && (!emails.length)) {
             // Email domain filter is in effect and user has no emails or
             // only emails in the wrong domain
@@ -169,31 +170,31 @@ module.exports = {
           } else {
             switch (spec.match || 'username') {
               case 'id':
-              if (!profile.id) {
-                console.error('@apostrophecms/passport-bridge: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
-                return callback(null, false);
-              }
-              criteria[spec.name + 'Id'] = profile.id;
-              break;
+                if (!profile.id) {
+                  self.apos.util.error('@apostrophecms/passport-bridge: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
+                  return callback(null, false);
+                }
+                criteria[spec.name + 'Id'] = profile.id;
+                break;
               case 'username':
-              if (!profile.username) {
-                console.error('@apostrophecms/passport-bridge: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
-                return callback(null, false);
-              }
-              criteria.username = profile.username;
-              break;
+                if (!profile.username) {
+                  self.apos.util.error('@apostrophecms/passport-bridge: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
+                  return callback(null, false);
+                }
+                criteria.username = profile.username;
+                break;
               case 'email':
               case 'emails':
-              if (!emails.length) {
+                if (!emails.length) {
                 // User has no email
-                return callback(null, false);
-              }
-              criteria.$or = emails.map(email => {
-                return { email }
-              })
-              break;
+                  return callback(null, false);
+                }
+                criteria.$or = emails.map(email => {
+                  return { email };
+                });
+                break;
               default:
-              return callback(new Error(`@apostrophecms/passport-bridge: ${spec.match} is not a supported value for the match property`));
+                return callback(new Error(`@apostrophecms/passport-bridge: ${spec.match} is not a supported value for the match property`));
             }
           }
           criteria.disabled = { $ne: true };
@@ -349,12 +350,16 @@ module.exports = {
         usage: 'Run this task to list the login URLs for each registered strategy.\n' +
         'This is helpful when writing markup to invite users to log in.',
         task: () => {
+          // eslint-disable-next-line no-console
           console.log('These are the login URLs you may wish to link users to:\n');
           self.options.strategies.forEach(spec => {
+            // eslint-disable-next-line no-console
             console.log(`${spec.label}: ${self.getLoginUrl(spec, true)}`);
           });
+          // eslint-disable-next-line no-console
           console.log('\nThese are the callback URLs you may need to configure on sites:\n');
           self.options.strategies.forEach(spec => {
+            // eslint-disable-next-line no-console
             console.log(`${spec.label}: ${self.getCallbackUrl(spec, true)}`);
           });
         }
