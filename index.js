@@ -278,7 +278,7 @@ module.exports = {
   },
   handlers(self) {
     return {
-      '@apostrophecms/login:after': {
+      '@apostrophecms/login:afterSessionLogin': {
         async redirectToNewLocale(req) {
           if (!req.session.passportLocale) {
             return;
