@@ -4,17 +4,14 @@
 {% extends data.outerLayout %}
 
 {% block main %}
-  <h2>A login error occurred</h2>
+  <h2>{{ __t('aposPassportBridge:errorHeading') }}</h2>
   <p>
-    An error occurred while logging in via {{ __(data.spec.label or data.spec.name) }}:
+    {{ __t('aposPassportBridge:errorSubheading', { label: data.spec.label or data.me }) }}
   </p>
   <p>
-    {{ __(data.message) }}
+    {{ __t(data.message) }}
   </p>
   <p>
-    If you believe you are seeing this message in error please contact the administrator.
-  </p>
-  <p>
-    <a href="/">Go Home</a>
+    {{ __t('aposPassportBridge:contactAdministrator') }}
   </p>
 {% endblock %}

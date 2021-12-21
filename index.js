@@ -2,6 +2,11 @@ module.exports = {
   init(self) {
     self.enablePassportStrategies();
   },
+  options: {
+    i18n: {
+      ns: 'aposPassportBridge'
+    }
+  },
   methods(self) {
     return {
       enablePassportStrategies() {
@@ -127,7 +132,7 @@ module.exports = {
           // Gets i18n'd in the template
           return self.sendPage(req, 'error', {
             spec: spec,
-            message: 'Your credentials were not accepted, your account is not affiliated with this site, or an existing account has the same username or email address.'
+            message: 'aposPassportBridge:rejected'
           });
         });
       },
