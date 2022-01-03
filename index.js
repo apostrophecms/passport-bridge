@@ -21,7 +21,10 @@ module.exports = {
         }
 
         self.options.strategies.forEach(spec => {
-          const Strategy = spec.module ? self.apos.root.require(spec.module) : spec.Strategy;
+          // console.log(spec.module);
+          // console.log(spec.Strategy);
+          const Strategy = spec.module ? self.apos.root.require(spec.module).Strategy : spec.Strategy;
+          console.log(Strategy);
           if (!Strategy) {
             throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
               'giving the name of an npm module installed in your project that\n' +
@@ -131,6 +134,7 @@ module.exports = {
 
       addFailureRoute(spec) {
         self.apos.app.get(self.getFailureUrl(spec), function (req, res) {
+          console.log(spec);
           // Gets i18n'd in the template
           return self.sendPage(req, 'error', {
             spec: spec,
