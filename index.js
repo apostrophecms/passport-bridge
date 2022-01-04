@@ -21,7 +21,11 @@ module.exports = {
         }
 
         self.options.strategies.forEach(spec => {
-          const Strategy = spec.module ? self.apos.root.require(spec.module) : spec.Strategy;
+          // Works with npm modules that export the strategy directly, npm modules
+          // that export a Strategy property, and directly passing in a strategy property
+          // in the spec
+          const strategyModule = spec.module && self.apos.root.require(spec.module);
+          const Strategy = strategyModule ? (strategyModule.Strategy || strategyModule) : spec.Strategy;
           if (!Strategy) {
             throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
               'giving the name of an npm module installed in your project that\n' +
@@ -114,7 +118,8 @@ module.exports = {
         self.apos.app.get(self.getCallbackUrl(spec, false),
           // middleware
           self.apos.login.passport.authenticate(
-            spec.name, {
+            spec.name,
+            {
               failureRedirect: self.getFailureUrl(spec)
             }
           ),

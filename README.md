@@ -82,6 +82,11 @@ module.exports = {
 };
 ```
 
+> ⚠️ Since we're not using the `create` option, users must actually exist in
+> Apostrophe with the same username or email address, depending on the
+> `match` option. If you want to automatically create users in Apostrophe,
+> see [creating users on demand](#creating-users-on-demand) below.
+
 ### Adding login links
 
 The easiest way to enable login is to use the `loginLinks` async component in your template:
