@@ -158,7 +158,7 @@ If you wish to import other fields from the profile object provided by the passp
 
 You may enable more than one strategy at the same time. Just configure them consecutively in the `strategies` array. This means you can have login via Twitter, Google, etc. on the same site.
 
-> ⚠️ Take care when choosing what identity providers to trust. When using single sign-on, your site's security is only as good as that of the identity provider you are trusting. If multiple strategies are supported with `email` as the matching method, and a malicious user succeeds in creating an account with that email address that matches any of the strategies, then that is sufficient for them to log in. Most major public providers, like Facebook, Twitter or Google, do require the user to prove they control an email address before associating it with an account.
+> ⚠️ Take care when choosing what identity providers to trust. When using single sign-on, your site's security is only as good as that of the identity provider you are trusting. If multiple strategies are enabled with `email` as the matching method, and a malicious user succeeds in creating an account with that email address that matches any of the strategies, then that is sufficient for them to log in. Most major public providers, like Facebook, Twitter or Google, do require the user to prove they control an email address before associating it with an account.
 
 ## Frequently asked questions
 
