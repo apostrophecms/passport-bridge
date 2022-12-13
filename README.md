@@ -108,7 +108,7 @@ You can also determine the login URLs by invoking the `@apostrophecms/passport-b
 Many strategies require an oauth callback URL. To discover those, run this command line task to print the URLs for login, and for the oauth callback URLs:
 
 ```
-node app apostrophe-passport:list-urls
+node app @apostrophecms/passport-bridge:listUrls
 ```
 
 You'll see something like:
