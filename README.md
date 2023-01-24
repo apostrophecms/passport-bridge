@@ -160,6 +160,11 @@ You may enable more than one strategy at the same time. Just configure them cons
 
 > ⚠️ Take care when choosing what identity providers to trust. When using single sign-on, your site's security is only as good as that of the identity provider you are trusting. If multiple strategies are enabled with `email` as the matching method, and a malicious user succeeds in creating an account with that email address that matches any of the strategies, then that is sufficient for them to log in. Most major public providers, like Facebook, Twitter or Google, do require the user to prove they control an email address before associating it with an account.
 
+## Accessing the user's `accessToken` and `refreshToken` to make API calls
+
+Setting the `retainAccessTokenInSession` option to `true` retains the `accessToken` and `refreshToken` provided by passport in `req.session.accessToken` and `req.session.ref
+reshToken`. Depending on your oauth authentication scope, this makes it possible to carry out API calls on the user's behalf when authenticating with github, gmail, etc. If you need to refresh the access token, you might try the [passport-oauth2-refresh](https://www.npmjs.com/package/passport-oauth2-refresh) module.
+
 ## Frequently asked questions
 
 ### Where do I `require` the passport strategy?
