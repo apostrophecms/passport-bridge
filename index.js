@@ -205,6 +205,10 @@ module.exports = {
           criteria.disabled = { $ne: true };
           try {
             const user = await self.apos.user.find(req, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
+            if (self.options.retainAccessTokenInSession && user) {
+              req.session.accessToken = accessToken;
+              req.session.refreshToken = refreshToken;
+            }
             return callback(null, user || false);
           } catch (err) {
             self.apos.util.error(err);
