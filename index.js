@@ -42,7 +42,8 @@ module.exports = {
             // sensibly. But we can do it by making a dummy strategy object now
             const dummy = new Strategy(Object.assign(
               {
-                callbackURL: 'https://dummy/test'
+                callbackURL: 'https://dummy/test',
+                passReqToCallback: self.options.retainAccessTokenInSession
               },
               spec.options
             ), self.findOrCreateUser(spec));
@@ -153,8 +154,18 @@ module.exports = {
       // on the profile, creating them if appropriate.
 
       findOrCreateUser(spec) {
-        return async function(accessToken, refreshToken, profile, callback) {
-          const req = self.apos.task.getReq();
+        if (self.options.retainAccessTokenInSession) {
+          return async function(req, accessToken, refreshToken, profile, callback) {
+            return body(req, accessToken, refreshToken, profile, callback);
+          };
+        } else {
+          return async function(accessToken, refreshToken, profile, callback) {
+            return body(null, accessToken, refreshToken, profile, callback);
+          };
+        }
+        async function body(req, accessToken, refreshToken, profile, callback) {
+          // Always use an admin req to find the user
+          const adminReq = self.apos.task.getReq();
           let criteria = {};
 
           if (spec.accept) {
@@ -204,8 +215,8 @@ module.exports = {
           }
           criteria.disabled = { $ne: true };
           try {
-            const user = await self.apos.user.find(req, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
-            if (self.options.retainAccessTokenInSession && user) {
+            const user = await self.apos.user.find(adminReq, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
+            if (self.options.retainAccessTokenInSession && user && req) {
               req.session.accessToken = accessToken;
               req.session.refreshToken = refreshToken;
             }
