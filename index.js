@@ -40,17 +40,19 @@ module.exports = {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
             // sensibly. But we can do it by making a dummy strategy object now
-            const dummy = new Strategy(Object.assign(
-              {
-                callbackURL: 'https://dummy/test'
-              },
-              spec.options
-            ), self.findOrCreateUser(spec));
+            const dummy = new Strategy({
+              callbackURL: 'https://dummy/test',
+              passReqToCallback: self.options.retainAccessTokenInSession,
+              ...spec.options
+            }, self.findOrCreateUser(spec));
             spec.name = dummy.name;
           }
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
-          self.strategies[spec.name] = new Strategy(spec.options, self.findOrCreateUser(spec));
+          self.strategies[spec.name] = new Strategy({
+            passReqToCallback: self.options.retainAccessTokenInSession,
+            ...spec.options
+          }, self.findOrCreateUser(spec));
           self.apos.login.passport.use(self.strategies[spec.name]);
         });
       },
@@ -153,8 +155,18 @@ module.exports = {
       // on the profile, creating them if appropriate.
 
       findOrCreateUser(spec) {
-        return async function(accessToken, refreshToken, profile, callback) {
-          const req = self.apos.task.getReq();
+        if (self.options.retainAccessTokenInSession) {
+          return async function(req, accessToken, refreshToken, profile, callback) {
+            return body(req, accessToken, refreshToken, profile, callback);
+          };
+        } else {
+          return async function(accessToken, refreshToken, profile, callback) {
+            return body(null, accessToken, refreshToken, profile, callback);
+          };
+        }
+        async function body(req, accessToken, refreshToken, profile, callback) {
+          // Always use an admin req to find the user
+          const adminReq = self.apos.task.getReq();
           let criteria = {};
 
           if (spec.accept) {
@@ -204,8 +216,8 @@ module.exports = {
           }
           criteria.disabled = { $ne: true };
           try {
-            const user = await self.apos.user.find(req, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
-            if (self.options.retainAccessTokenInSession && user) {
+            const user = await self.apos.user.find(adminReq, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
+            if (self.options.retainAccessTokenInSession && user && req) {
               req.session.accessToken = accessToken;
               req.session.refreshToken = refreshToken;
             }
