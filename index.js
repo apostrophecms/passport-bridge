@@ -40,18 +40,19 @@ module.exports = {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
             // sensibly. But we can do it by making a dummy strategy object now
-            const dummy = new Strategy(Object.assign(
-              {
-                callbackURL: 'https://dummy/test',
-                passReqToCallback: self.options.retainAccessTokenInSession
-              },
-              spec.options
-            ), self.findOrCreateUser(spec));
+            const dummy = new Strategy({
+              callbackURL: 'https://dummy/test',
+              passReqToCallback: self.options.retainAccessTokenInSession,
+              ...spec.options
+            }, self.findOrCreateUser(spec));
             spec.name = dummy.name;
           }
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
-          self.strategies[spec.name] = new Strategy(spec.options, self.findOrCreateUser(spec));
+          self.strategies[spec.name] = new Strategy({
+            passReqToCallback: self.options.retainAccessTokenInSession,
+            ...spec.options
+          }, self.findOrCreateUser(spec));
           self.apos.login.passport.use(self.strategies[spec.name]);
         });
       },
