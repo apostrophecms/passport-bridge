@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 - 2023-03-24
+
+* Add logging of passport error details.
+
 ## 1.1.1 - 2023-02-14
 
 * Corrected a bug that prevented `retainAccessTokenInSession` from working properly. Note that this option can only work with Passport strategies that honor the `passReqToCallback: true` option (passed for you automatically). Strategies derived from `passport-oauth2`, such as `passport-github` and many others, support this and others may as well.

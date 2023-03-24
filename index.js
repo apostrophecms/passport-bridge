@@ -117,23 +117,38 @@ module.exports = {
       // Adds the callback route associated with a strategy. oauth-based strategies and
       // certain others redirect here to complete the login handshake
       addCallbackRoute(spec) {
-        self.apos.app.get(self.getCallbackUrl(spec, false),
-          // middleware
-          self.apos.login.passport.authenticate(
+        console.log('setting route to:', self.getCallbackUrl(spec, false));
+        // We're using the `passport.authenticate` middleware as part of the implementation
+        // of a route here
+        self.apos.app.get(self.getCallbackUrl(spec, false), (req, res) => {
+          return self.apos.login.passport.authenticate(
             spec.name,
-            {
-              failureRedirect: self.getFailureUrl(spec)
+            // Use our own callback so we can log errors in a useful way
+            (err, user, info) => {
+              if (err) {
+                return fail(err);
+              }
+              if (!user) {
+                // It is unclear what passport natively does in this situation
+                // or if it can ever happen, the docs suggest it can, so play it safe
+                return fail('Authentication middleware "succeeded" with no user');
+              }
+              return req.login(user, err => {
+                if (err) {
+                  return fail('Error during req.login:' + err);
+                }
+                const redirect = req.session.passportRedirect || '/';
+                delete req.session.passportRedirect;
+                return res.rawRedirect(redirect);
+              });
+              function fail(err) {
+                self.apos.util.error('A passport authentication error occurred:');
+                self.apos.util.error(err);
+                return res.redirect(self.getFailureUrl(spec));
+              }
             }
-          ),
-          // The actual route reached after authentication redirects
-          // appropriately, either to an explicitly requested location
-          // or the home page
-          (req, res) => {
-            const redirect = req.session.passportRedirect || '/';
-            delete req.session.passportRedirect;
-            return res.rawRedirect(redirect);
-          }
-        );
+          )(req, res);
+        });
       },
 
       addFailureRoute(spec) {
