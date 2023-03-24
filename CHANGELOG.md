@@ -2,7 +2,13 @@
 
 ## 1.2.0 - 2023-03-24
 
-* Add logging of passport error details.
+* The `namespaceUsernames: true` option is available and recommended for projects that
+might allow more than one strategy. A github username like `boutell` becomes
+`boutell@github`, for instance. Otherwise if `boutell` in github and `boutell` in gitlab
+are separate people there will be a conflict, and if `match` is unspecified or
+set to `username` then there will be a security issue with multiple strategies.
+Note that `match: 'id'` has always been the safest option.
+* Added logging of passport error details for easier debugging.
 
 ## 1.1.1 - 2023-02-14
 

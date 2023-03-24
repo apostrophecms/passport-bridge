@@ -180,6 +180,7 @@ module.exports = {
           };
         }
         async function body(req, accessToken, refreshToken, profile, callback) {
+          console.log('*** profile is:', JSON.stringify(profile, null, '  '));
           // Always use an admin req to find the user
           const adminReq = self.apos.task.getReq();
           let criteria = {};
@@ -200,6 +201,7 @@ module.exports = {
           if (typeof (spec.match) === 'function') {
             criteria = spec.match(profile);
           } else {
+            let username;
             switch (spec.match || 'username') {
               case 'id':
                 if (!profile.id) {
@@ -209,11 +211,13 @@ module.exports = {
                 criteria[spec.name + 'Id'] = profile.id;
                 break;
               case 'username':
-                if (!profile.username) {
+                username = self.getUsername(spec, profile);
+                if (!username) {
                   self.apos.util.error('@apostrophecms/passport-bridge: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
                   return callback(null, false);
+                } else {
+                  criteria.username = self.getUsername(spec, profile);
                 }
-                criteria.username = profile.username;
                 break;
               case 'email':
               case 'emails':
@@ -278,12 +282,9 @@ module.exports = {
       async createUser(spec, profile) {
         const user = self.apos.user.newInstance();
         user.role = await self.userRole();
-        user.username = profile.username;
+        user.username = self.getUsername(spec, profile);
         user.title = profile.displayName || profile.username || '';
         user[spec.name + 'Id'] = profile.id;
-        if (!user.username) {
-          user.username = self.apos.util.slugify(user.title);
-        }
         const emails = self.getRelevantEmailsFromProfile(spec, profile);
         if (emails.length) {
           user.email = emails[0];
@@ -315,6 +316,14 @@ module.exports = {
       // of newly created users.
       async userRole() {
         return (self.options.create && self.options.create.role) || 'guest';
+      },
+
+      getUsername(spec, profile) {
+        const username = profile.username || profile.id;
+        if (!username) {
+          return false;
+        }
+        return self.options.namespaceUsernames ? `${profile.username}@${spec.name}` : profile.username;
       }
     };
   },
