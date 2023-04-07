@@ -1,12 +1,12 @@
 # Changelog
 
-## 1.2.0 - 2023-04-06
+## 1.2.0-alpha.2 - 2023-04-07
 
 * Introduced the new `retainAccessToken` option, which retains tokens in Apostrophe's
 "safe" where they can be used for longer than a single Apostrophe session. Please note
 that `retainAccessTokenInSession` is now deprecated, as it cannot work with Passport 0.6
 as found in current Apostrophe 3.x due to upstream changes. See the README for
-more information about the new approach. You only need this option if you want to 
+more information about the new approach. You only need this option if you want to
 call additional APIs of the provider, for instance github APIs for those using
 `passport-github`.
 
