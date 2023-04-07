@@ -1,6 +1,13 @@
+const fs = require('fs');
+const path = require('path');
 const humanname = require('humanname');
+const { AuthTokenRefresh } = require('passport-oauth2-refresh');
 
 module.exports = {
+  bundle: {
+    directory: 'modules',
+    modules: getBundleModuleNames()
+  },
   init(self) {
     self.enablePassportStrategies();
   },
@@ -12,6 +19,7 @@ module.exports = {
   methods(self) {
     return {
       enablePassportStrategies() {
+        self.refresh = new AuthTokenRefresh();
         self.strategies = {};
         if (!self.apos.baseUrl) {
           throw new Error('@apostrophecms/passport-bridge: you must configure the top-level "baseUrl" option for apostrophe');
@@ -54,6 +62,7 @@ module.exports = {
             ...spec.options
           }, self.findOrCreateUser(spec));
           self.apos.login.passport.use(self.strategies[spec.name]);
+          self.refresh.use(self.strategies[spec.name]);
         });
       },
 
@@ -217,9 +226,21 @@ module.exports = {
           criteria.disabled = { $ne: true };
           try {
             const user = await self.apos.user.find(adminReq, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
+            // Legacy, incompatible with Passport 0.6
             if (self.options.retainAccessTokenInSession && user && req) {
               req.session.accessToken = accessToken;
               req.session.refreshToken = refreshToken;
+            }
+            // Preferred, see documentation
+            if (self.options.retainAccessToken && user) {
+              await self.apos.user.safe.updateOne({
+                _id: user._id
+              }, {
+                $set: {
+                  [`tokens.${spec.name}.accessToken`]: accessToken,
+                  [`tokens.${spec.name}.refreshToken`]: refreshToken
+                }
+              });
             }
             return callback(null, user || false);
           } catch (err) {
@@ -412,3 +433,11 @@ module.exports = {
     };
   }
 };
+
+function getBundleModuleNames() {
+  const source = path.join(__dirname, './modules/@apostrophecms');
+  return fs
+    .readdirSync(source, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => `@apostrophecms/${dirent.name}`);
+}

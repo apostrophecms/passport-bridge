@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0 - 2023-04-06
+
+* Introduced the new `retainAccessToken` option, which retains tokens in Apostrophe's
+"safe" where they can be used for longer than a single Apostrophe session. Please note
+that `retainAccessTokenInSession` is now deprecated, as it cannot work with Passport 0.6
+as found in current Apostrophe 3.x due to upstream changes. See the README for
+more information about the new approach. You only need this option if you want to 
+call additional APIs of the provider, for instance github APIs for those using
+`passport-github`.
+
 ## 1.1.1 - 2023-02-14
 
 * Corrected a bug that prevented `retainAccessTokenInSession` from working properly. Note that this option can only work with Passport strategies that honor the `passReqToCallback: true` option (passed for you automatically). Strategies derived from `passport-oauth2`, such as `passport-github` and many others, support this and others may as well.

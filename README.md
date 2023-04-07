@@ -162,9 +162,96 @@ You may enable more than one strategy at the same time. Just configure them cons
 
 ## Accessing the user's `accessToken` and `refreshToken` to make API calls
 
-Setting the `retainAccessTokenInSession` option to `true` retains the `accessToken` and `refreshToken` provided by passport in `req.session.accessToken` and `req.session.refreshToken`. Depending on your oauth authentication scope, this makes it possible to carry out API calls on the user's behalf when authenticating with github, gmail, etc. If you need to refresh the access token, you might try the [passport-oauth2-refresh](https://www.npmjs.com/package/passport-oauth2-refresh) module.
+When we authenticate the user via an identity provider like `github` that has APIs
+of its own, it is often desirable to call additional APIs of that provider.
 
-Note that this option can only work with Passport strategies that honor the `passReqToCallback: true` option (passed for you automatically). Strategies derived from `passport-oauth2`, such as `passport-github2` and many others, support this and others may as well.
+Setting the `retainAccessToken` option to `true` retains the `accessToken` and `refreshToken` in Apostrophe's
+"safe," which is a special storage place for sensitive data associated with a user.
+
+You can then access that data like this:
+
+```javascript
+const tokens = await self.apos.user.getTokens(req.user, 'github');
+if (tokens) {
+  // Use tokens.accessToken and, sometimes, tokens.refreshToken
+} else {
+  // Tell the user to connect with github again
+}
+```
+
+A passport strategy name is always required. Unfortunately, this is not the same thing as
+the npm module name. If you do not know the strategy name, check
+the `strategy.js` file in the source code of the Passport strategy module you are
+using, such as `passport-github`.
+
+There is no guarantee that a particular strategy supports tokens, or requires both
+`accessToken` and `refreshToken`.
+
+Access tokens can expire. If the access token expires and the strategy you are using
+supports OAuth refresh tokens, you can ask Apostrophe to refresh it:
+
+```javascript
+// Passing in the existing refresh token is optional, but avoids an extra database call
+const { accessToken, refreshToken } = await self.apos.user.refreshTokens(req.user, 'github', refreshToken);
+```
+
+If the refresh fails, an exception is thrown. In addition, if it fails with a
+"401: Unauthorized" error, the tokens are removed, so that the next call
+to `getTokens` will return null.
+
+If you need to refresh the tokens yourself by other means, you can pass in the result:
+
+```javascript
+// We obtained these new tokens by means of our own
+await self.apos.user.updateTokens(req.user, 'github', { accessToken, refreshToken });
+```
+
+Passing in the existing access token and refresh token is optional, and avoids
+waiting for an extra database call.
+
+> Determining whether an access token has expired will depend on the platform-specific APIs you
+are calling, but most will return a `401` status code in this situation.
+
+To simplify this flow, use `withAccessToken`. Here is an example
+where the Octokit API is used. The API request in the nested function is first made with
+the existing access token. If an exception with a `status` property equal to `401`
+is thrown, the token is refreshed and updated, and the nested function is invoked again
+with the new token. If the refreshed access token also fails with a `401`, the error is
+allowed to throw. All other errors are allowed to pass through.
+
+```javascript
+const { Octokit } = require("@octokit/rest");
+
+const repos = await self.apos.user.withAccessToken(req.user, 'github', async (accessToken, unauthorized) => {
+  const octokit = Octokit({ auth: accessToken });
+  return req.octokit.rest.repos.listForAuthenticatedUser({
+    affiliation: 'owner',
+    // 100 is the max allowed per page
+    per_page: 100
+  });
+});
+// Do something cool with `repos`
+```
+
+Not all APIs that expect access tokens are created equal. If the API you are calling throws
+an error in this situation that doesn't have `status: 401`, you can throw a suitable
+object yourself (pseudocode):
+
+```javascript
+try {
+  await someStrangeAPI(accessToken);
+} catch (e) {
+  // Just an example, your mileage will vary
+  if (e.toString().includes('unauthorized')) {
+    throw {
+      status: 401
+    };
+  } else {
+    // Some other error, let it fail
+    throw e;
+  }
+}
+```
 
 ## Frequently asked questions
 
