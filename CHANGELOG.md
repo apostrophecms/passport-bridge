@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0-alpha.4 - 2023-04-07
+
+* More dependency games.
+
 ## 1.2.0-alpha.3 - 2023-04-07
 
 * Depend on a compatible temporary fork of `passport-oauth2-refresh`.

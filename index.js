@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const humanname = require('humanname');
-const { AuthTokenRefresh } = require('passport-oauth2-refresh');
+const { AuthTokenRefresh } = require('@apostrophecms/passport-oauth2-refresh');
 
 module.exports = {
   bundle: {
