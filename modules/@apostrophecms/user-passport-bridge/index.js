@@ -46,7 +46,7 @@ module.exports = {
               if (err) {
                 return reject(err);
               }
-              let newRefreshToken = refreshToken || originalRefreshToken;
+              const newRefreshToken = refreshToken || originalRefreshToken;
               try {
                 await self.updateTokens(user, strategy, {
                   accessToken,
