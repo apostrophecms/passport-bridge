@@ -86,6 +86,44 @@ module.exports = {
             throw e;
           }
         }
+      },
+
+      async requestConnection(req, strategyName, options = {}) {
+        if (!req.user) {
+          throw self.apos.error('forbidden', 'No user');
+        }
+        const bridge = self.apos.modules['@apostrophecms/passport-bridge'];
+        const strategy = bridge.strategies[strategyName];
+        if (!strategy) {
+          throw self.apos.error('notfound', 'No such strategy');
+        }
+        const token = self.apos.util.generateId();
+        await self.safe.updateOne({
+          _id: req.user._id
+        }, {
+          $set: {
+            [`connectionRequests.${strategyName}`]: {
+              token,
+              expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+              options
+            }
+          }
+        });
+        const url = bridge.getConnectUrl(strategyName, token, true);
+        const site = (new URL(self.apos.baseUrl)).hostname;
+
+        await bridge.email(req, {
+          user: req.user,
+          strategyName,
+          token,
+          url
+        }, {
+          to: user.email,
+          subject: req.t('apostrophePassportBridge:connectionRequest', {
+            strategyName,
+            site
+          })
+        });
       }
     };
   }

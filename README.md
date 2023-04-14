@@ -213,7 +213,7 @@ waiting for an extra database call.
 are calling, but most will return a `401` status code in this situation.
 
 To simplify this flow, use `withAccessToken`. Here is an example
-where the Octokit API is used. The API request in the nested function is first made with
+where the github Octokit API is used. The API request in the nested function is first made with
 the existing access token. If an exception with a `status` property equal to `401`
 is thrown, the token is refreshed and updated, and the nested function is invoked again
 with the new token. If the refreshed access token also fails with a `401`, the error is
@@ -252,6 +252,99 @@ try {
   }
 }
 ```
+
+## Issues with multiple services
+
+### Conflicting usernames
+
+If a user is already logged in, for instance via Apostrophe's standard login screen,
+and then passes through the Passport flow to log in via a second identity provider,
+Passport will log the user out of the first account by default, and in most cases
+will wind up creating a second account, or mistakenly reuse an account associated
+with a different service.
+
+This problem can be mitigated by setting `match` to `email` for each strategy, as long
+as the user has the same email address in each case and the service in question
+offers email addresses as an option.
+
+### "Connecting" accounts without creating a second account
+
+An individual may want to associate an ordinary Apostrophe account with a secondary service,
+such as a github account, that has a different email address. Unfortunately, in this case,
+simply following a link to the login URL for a second service this will log the user out of
+the first account and log them into an entirely separate account based on the email address
+from github when using `match: 'email'` as described above. If using `match: 'id'`, the
+behavior is more consistent, but still undesirable: a separate account is always created.
+
+This can be addressed via the following flow:
+
+1. The user logs in normally to their Apostrophe account.
+ 
+2. Await `requestConnection` to generate a confirmation link and email it
+to the current user's email address. When this method resolves, the email has been
+handed off for delivery, and it is appropriate to tell the user to expect it soon.
+
+> Apostrophe must be
+> [correctly configured for reliable email delivery](https://v3.docs.apostrophecms.org/guide/sending-email.html#sending-email-from-your-apostrophe-project).
+> If you do not take appropriate steps to ensure this, the email probably will not get through.
+
+```javascript
+await self.apos.user.requestConnection(req, 'STRATEGY NAME HERE', {
+  redirectTo: '/site/relative/url/here',
+});
+```
+
+> The strategy name depends on the passport strategy in question. `passport-github` uses
+> the strategy name `github`. You can find it in the source of the strategy module
+> you are using and it is usually your first guess as well.
+
+3. The user receives the email and follows the link provided.
+
+4. The user is redirected to authorize access to their `github` account (in this example).
+
+5. The user is redirectd to the home page, or to the URL you optionally specify via
+`redirectTo`. They are still logged into the original account. Their strategy-specific id
+is captured in their `user` piece as `githubId` (in the case of the github strategy;
+substitute the appropriate strategy name), and their tokens are available as described
+earlier if `retainSessionToken: true` is set.
+
+> Note that for security reasons, the link in the email is only valid for twenty-four hours.
+
+### Overriding the email template
+
+To override the email message that is sent, copy `views/connectEmail.html` from
+the `@apostrophecms/passport-bridge` npm module to your project-level
+`modules/@apostrophecms/passport-bridge/views` folder, and edit that template you see fit.
+
+### Session properties
+
+Note that when following this flow the user's original req.session properties are
+preserved. Normally this is not possible, because Passport 0.6 or better always
+regenerates the session on a new login.
+
+### Logging in via the secondary strategy
+
+In this example, a user who "connects" their account to github will be able to
+"log in via github" in the future, if they so choose. Since we trust that github
+maintains good security, and they proved control of the original account before
+connecting with github, this is usually acceptable.
+
+However, if you wish to block this for a particular strategy you can specify
+the `login: false` option when configuring that strategy. If you take this
+path, users will be able to "connect" an account using that strategy to their
+original account, but will not be able to log in via that strategy alone. In this
+situation the secondary strategy is present for API token access only.
+
+### Disconnecting a strategy from an account
+
+You can disconnect a strategy at any time:
+
+```javascript
+await self.apos.user.removeConnection(req, 'STRATEGY NAME HERE');
+```
+
+This will clear the related strategy-specific id, e.g. it will purge `githubId`
+if the strategy name is `github`.
 
 ## Frequently asked questions
 
