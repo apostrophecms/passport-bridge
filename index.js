@@ -488,6 +488,7 @@ module.exports = {
             self.addLoginRoute(spec);
             self.addCallbackRoute(spec);
             self.addFailureRoute(spec);
+            self.addConnectRoute(spec);
           });
         }
       }

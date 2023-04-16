@@ -1,5 +1,9 @@
 # Changelog
 
+## UNRELEASED
+
+* Back to using upstream `passport-oauth2-refresh` now that our PR has been accepted (thanks).
+ 
 ## 1.2.0-alpha.4 - 2023-04-07
 
 * More dependency games.
@@ -17,6 +21,8 @@ as found in current Apostrophe 3.x due to upstream changes. See the README for
 more information about the new approach. You only need this option if you want to
 call additional APIs of the provider, for instance github APIs for those using
 `passport-github`.
+* Introduced convenience methods to use the access token in such a way that it is
+automatically refreshed if necessary.
 
 ## 1.1.1 - 2023-02-14
 

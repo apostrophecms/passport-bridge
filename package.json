@@ -28,6 +28,6 @@
   },
   "dependencies": {
     "humanname": "^0.2.2",
-    "@apostrophecms/passport-oauth2-refresh": "^2.1.0"
+    "passport-oauth2-refresh": "^2.2.0"
   }
 }
