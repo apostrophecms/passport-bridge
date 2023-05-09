@@ -164,7 +164,7 @@ module.exports = {
                 }
               }
             });
-            res.cookie(`apos-connect`, `${strategyName}:${nonce}`, {
+            res.cookie('apos-connect', `${strategyName}:${nonce}`, {
               maxAge: 1000 * 60 * 60 * 24,
               httpOnly: true,
               secure: (req.protocol === 'https')
@@ -176,7 +176,6 @@ module.exports = {
           }
         });
       },
-
 
       // Adds the callback route associated with a strategy. oauth-based strategies and
       // certain others redirect here to complete the login handshake
@@ -336,7 +335,7 @@ module.exports = {
       },
 
       async getConnectingInfo(req) {
-        const cookie = req.cookies[`apos-connect`];
+        const cookie = req.cookies['apos-connect'];
         if (!cookie) {
           return null;
         }
@@ -444,7 +443,7 @@ module.exports = {
               req.session[key] = value;
             }
           }
-          req.res.clearCookie(`apos-connect`);
+          req.res.clearCookie('apos-connect');
         },
         async redirectToNewLocale(req) {
           if (!req.session.passportLocale) {
