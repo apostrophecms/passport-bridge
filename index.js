@@ -50,7 +50,7 @@ module.exports = {
             // sensibly. But we can do it by making a dummy strategy object now
             const dummy = new Strategy({
               callbackURL: 'https://dummy/test',
-              passReqToCallback: self.options.retainAccessTokenInSession,
+              passReqToCallback: true,
               ...spec.options
             }, self.findOrCreateUser(spec));
             spec.name = dummy.name;
@@ -58,7 +58,7 @@ module.exports = {
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
           self.strategies[spec.name] = new Strategy({
-            passReqToCallback: self.options.retainAccessTokenInSession,
+            passReqToCallback: true,
             ...spec.options
           }, self.findOrCreateUser(spec));
           self.apos.login.passport.use(self.strategies[spec.name]);
@@ -132,6 +132,7 @@ module.exports = {
 
       addConnectRoute(spec) {
         self.apos.app.get(self.getConnectUrl(spec.name, ':token'), async (req, res) => {
+          const strategyName = spec.name;
           try {
             const token = req.params.token;
             if (!token.length) {
@@ -150,20 +151,20 @@ module.exports = {
               self.apos.util.info('Token expired for connect route');
               return res.redirect(self.getFailureUrl(spec));
             }
-            const cookie = self.apos.util.generateId();
+            const nonce = self.apos.util.generateId();
             await self.apos.user.safe.updateOne({
               _id: safe._id
             }, {
               $set: {
-                [`connections.${strategyName}`]: {
-                  cookie,
+                [`connectionRequests.${strategyName}`]: {
+                  nonce,
                   session: {
                     ...req.session
                   }
                 }
               }
             });
-            res.cookie(`apos-${strategyName}-connect`, cookie, {
+            res.cookie(`apos-connect`, `${strategyName}:${nonce}`, {
               maxAge: 1000 * 60 * 60 * 24,
               httpOnly: true,
               secure: (req.protocol === 'https')
@@ -218,16 +219,13 @@ module.exports = {
       // on the profile, creating them if appropriate.
 
       findOrCreateUser(spec) {
-        if (self.options.retainAccessTokenInSession) {
-          return async function(req, accessToken, refreshToken, profile, callback) {
-            return body(req, accessToken, refreshToken, profile, callback);
-          };
-        } else {
-          return async function(accessToken, refreshToken, profile, callback) {
-            return body(null, accessToken, refreshToken, profile, callback);
-          };
-        }
+        return body;
         async function body(req, accessToken, refreshToken, profile, callback) {
+          if (!req?.res) {
+            // req was not passed (strategy used does not support that), shift
+            // parameters by one so they come in under the right names
+            return body(null, req, accessToken, refreshToken, profile);
+          }
           // Always use an admin req to find the user
           const adminReq = self.apos.task.getReq();
           let criteria = {};
@@ -238,7 +236,7 @@ module.exports = {
             }
           }
 
-          const connectingUserId = await self.getConnectingUserId(req, spec.name);
+          const connectingUserId = req && await self.getConnectingUserId(req, spec.name);
           if (connectingUserId) {
             criteria._id = connectingUserId;
           } else {
@@ -322,22 +320,32 @@ module.exports = {
       },
 
       async getConnectingUserId(req, strategyName) {
-        const info = await getConnectingInfo(req, strategyName);
+        const info = await self.getConnectingInfo(req);
+        if (strategyName && info?.strategyName !== strategyName) {
+          return false;
+        }
         return info && info._id;
       },
 
       async getConnectingSession(req, strategyName) {
-        const info = await getConnectingInfo(req, strategyName);
+        const info = await self.getConnectingInfo(req);
+        if (strategyName && info?.strategyName !== strategyName) {
+          return false;
+        }
         return info && info.session;
       },
 
-      async getConnectingInfo(req, strategyName) {
-        const cookie = req.cookies[`apos-${strategyName}-connect`];
+      async getConnectingInfo(req) {
+        const cookie = req.cookies[`apos-connect`];
         if (!cookie) {
           return null;
         }
+        const [ strategyName, nonce ] = cookie.split(':');
+        if (!(strategyName && nonce)) {
+          return null;
+        }
         const safe = await self.apos.user.safe.findOne({
-          [`connectionRequests.${strategyName}.cookie`]: cookie
+          [`connectionRequests.${strategyName}.nonce`]: nonce
         });
         if (!safe) {
           return null;
@@ -345,7 +353,11 @@ module.exports = {
         if (safe.connectionRequests[strategyName].expiresAt < Date.now()) {
           return null;
         }
-        return safe._id;
+        return {
+          _id: safe._id,
+          session: safe.connectionRequests[strategyName].session,
+          strategyName
+        };
       },
 
       // Returns an array of email addresses found in the user's
@@ -432,7 +444,7 @@ module.exports = {
               req.session[key] = value;
             }
           }
-          res.clearCookie(`apos-${strategyName}-connect`);
+          req.res.clearCookie(`apos-connect`);
         },
         async redirectToNewLocale(req) {
           if (!req.session.passportLocale) {
