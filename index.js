@@ -44,6 +44,10 @@ module.exports = {
           }
           // Are there strategies requiring no options? Probably not, but maybe...
           spec.options = spec.options || {};
+          const scope = spec.options.scope || spec?.authenticate?.scope;
+          spec.options.scope = spec?.authenticate?.scope;
+          spec.authenticate = spec.authenticate || {};
+          spec.authenticate.scope = spec.authenticate.scope || scope;
           if (!spec.name) {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
@@ -185,6 +189,7 @@ module.exports = {
           self.apos.login.passport.authenticate(
             spec.name,
             {
+              ...spec.authenticate,
               failureRedirect: self.getFailureUrl(spec)
             }
           ),

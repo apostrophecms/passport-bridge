@@ -2,6 +2,11 @@
 
 ## UNRELEASED
 
+* Support for making "connections" to secondary accounts. For instance, a user whose primary account login method is email can connect
+their account to a github account when the appropriate features are active as described in the documentation.
+* Accept `scope` either as an `option` of the strategy, or as an `authenticate` property for the strategy, and
+pass it on to the strategy in both ways, as well as to both the login and callback routes. This allows `passport-github2`
+to capture the user's private email address correctly, and should help with other differences between strategies as well.
 * Back to using upstream `passport-oauth2-refresh` now that our PR has been accepted (thanks).
  
 ## 1.2.0-alpha.4 - 2023-04-07
