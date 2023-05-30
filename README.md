@@ -162,9 +162,189 @@ You may enable more than one strategy at the same time. Just configure them cons
 
 ## Accessing the user's `accessToken` and `refreshToken` to make API calls
 
-Setting the `retainAccessTokenInSession` option to `true` retains the `accessToken` and `refreshToken` provided by passport in `req.session.accessToken` and `req.session.refreshToken`. Depending on your oauth authentication scope, this makes it possible to carry out API calls on the user's behalf when authenticating with github, gmail, etc. If you need to refresh the access token, you might try the [passport-oauth2-refresh](https://www.npmjs.com/package/passport-oauth2-refresh) module.
+When we authenticate the user via an identity provider like `github` that has APIs
+of its own, it is often desirable to call additional APIs of that provider.
 
-Note that this option can only work with Passport strategies that honor the `passReqToCallback: true` option (passed for you automatically). Strategies derived from `passport-oauth2`, such as `passport-github2` and many others, support this and others may as well.
+Setting the `retainAccessToken` option to `true` retains the `accessToken` and `refreshToken` in Apostrophe's
+"safe," which is a special storage place for sensitive data associated with a user.
+
+You can then access that data like this:
+
+```javascript
+const tokens = await self.apos.user.getTokens(req.user, 'github');
+if (tokens) {
+  // Use tokens.accessToken and, sometimes, tokens.refreshToken
+} else {
+  // Tell the user to connect with github again
+}
+```
+
+A passport strategy name is always required. Unfortunately, this is not the same thing as
+the npm module name. If you do not know the strategy name, check
+the `strategy.js` file in the source code of the Passport strategy module you are
+using, such as `passport-github`.
+
+There is no guarantee that a particular strategy supports tokens, or requires both
+`accessToken` and `refreshToken`.
+
+Access tokens can expire. If the access token expires and the strategy you are using
+supports OAuth refresh tokens, you can ask Apostrophe to refresh it:
+
+```javascript
+// Passing in the existing refresh token is optional, but avoids an extra database call
+const { accessToken, refreshToken } = await self.apos.user.refreshTokens(req.user, 'github', refreshToken);
+```
+
+If the refresh fails, an exception is thrown. In addition, if it fails with a
+"401: Unauthorized" error, the tokens are removed, so that the next call
+to `getTokens` will return null.
+
+If you need to refresh the tokens yourself by other means, you can pass in the result:
+
+```javascript
+// We obtained these new tokens by means of our own
+await self.apos.user.updateTokens(req.user, 'github', { accessToken, refreshToken });
+```
+
+Passing in the existing access token and refresh token is optional, and avoids
+waiting for an extra database call.
+
+> Determining whether an access token has expired will depend on the platform-specific APIs you
+are calling, but most will return a `401` status code in this situation.
+
+To simplify this flow, use `withAccessToken`. Here is an example
+where the github Octokit API is used. The API request in the nested function is first made with
+the existing access token. If an exception with a `status` property equal to `401`
+is thrown, the token is refreshed and updated, and the nested function is invoked again
+with the new token. If the refreshed access token also fails with a `401`, the error is
+allowed to throw. All other errors are allowed to pass through.
+
+```javascript
+const { Octokit } = require("@octokit/rest");
+
+const repos = await self.apos.user.withAccessToken(req.user, 'github', async (accessToken, unauthorized) => {
+  const octokit = Octokit({ auth: accessToken });
+  return req.octokit.rest.repos.listForAuthenticatedUser({
+    affiliation: 'owner',
+    // 100 is the max allowed per page
+    per_page: 100
+  });
+});
+// Do something cool with `repos`
+```
+
+Not all APIs that expect access tokens are created equal. If the API you are calling throws
+an error in this situation that doesn't have `status: 401`, you can throw a suitable
+object yourself (pseudocode):
+
+```javascript
+try {
+  await someStrangeAPI(accessToken);
+} catch (e) {
+  // Just an example, your mileage will vary
+  if (e.toString().includes('unauthorized')) {
+    throw {
+      status: 401
+    };
+  } else {
+    // Some other error, let it fail
+    throw e;
+  }
+}
+```
+
+## Issues with multiple services
+
+### Conflicting usernames
+
+If a user is already logged in, for instance via Apostrophe's standard login screen,
+and then passes through the Passport flow to log in via a second identity provider,
+Passport will log the user out of the first account by default, and in most cases
+will wind up creating a second account, or mistakenly reuse an account associated
+with a different service.
+
+This problem can be mitigated by setting `match` to `email` for each strategy, as long
+as the user has the same email address in each case and the service in question
+offers email addresses as an option.
+
+### "Connecting" accounts without creating a second account
+
+An individual may want to associate an ordinary Apostrophe account with a secondary service,
+such as a github account, that has a different email address. Unfortunately, in this case,
+simply following a link to the login URL for a second service this will log the user out of
+the first account and log them into an entirely separate account based on the email address
+from github when using `match: 'email'` as described above. If using `match: 'id'`, the
+behavior is more consistent, but still undesirable: a separate account is always created.
+
+This can be addressed via the following flow:
+
+1. The user logs in normally to their Apostrophe account.
+ 
+2. Await `requestConnection` to generate a confirmation link and email it
+to the current user's email address. When this method resolves, the email has been
+handed off for delivery, and it is appropriate to tell the user to expect it soon.
+
+> Apostrophe must be
+> [correctly configured for reliable email delivery](https://v3.docs.apostrophecms.org/guide/sending-email.html#sending-email-from-your-apostrophe-project).
+> If you do not take appropriate steps to ensure this, the email probably will not get through.
+
+```javascript
+await self.apos.user.requestConnection(req, 'STRATEGY NAME HERE', {
+  redirectTo: '/site/relative/url/here',
+});
+```
+
+> The strategy name depends on the passport strategy in question. `passport-github` uses
+> the strategy name `github`. You can find it in the source of the strategy module
+> you are using and it is usually your first guess as well.
+
+3. The user receives the email and follows the link provided.
+
+4. The user is redirected to authorize access to their `github` account (in this example).
+
+5. The user is redirectd to the home page, or to the URL you optionally specify via
+`redirectTo`. They are still logged into the original account. Their strategy-specific id
+is captured in their `user` piece as `githubId` (in the case of the github strategy;
+substitute the appropriate strategy name), and their tokens are available as described
+earlier if `retainSessionToken: true` is set.
+
+> Note that for security reasons, the link in the email is only valid for twenty-four hours.
+
+### Overriding the email template
+
+To override the email message that is sent, copy `views/connectEmail.html` from
+the `@apostrophecms/passport-bridge` npm module to your project-level
+`modules/@apostrophecms/passport-bridge/views` folder, and edit that template you see fit.
+
+### Session properties
+
+Note that when following this flow the user's original req.session properties are
+preserved. Normally this is not possible, because Passport 0.6 or better always
+regenerates the session on a new login.
+
+### Logging in via the secondary strategy
+
+In this example, a user who "connects" their account to github will be able to
+"log in via github" in the future, if they so choose. Since we trust that github
+maintains good security, and they proved control of the original account before
+connecting with github, this is usually acceptable.
+
+However, if you wish to block this for a particular strategy you can specify
+the `login: false` option when configuring that strategy. If you take this
+path, users will be able to "connect" an account using that strategy to their
+original account, but will not be able to log in via that strategy alone. In this
+situation the secondary strategy is present for API token access only.
+
+### Disconnecting a strategy from an account
+
+You can disconnect a strategy at any time:
+
+```javascript
+await self.apos.user.removeConnection(req, 'STRATEGY NAME HERE');
+```
+
+This will clear the related strategy-specific id, e.g. it will purge `githubId`
+if the strategy name is `github`.
 
 ## Frequently asked questions
 

@@ -1,6 +1,13 @@
+const fs = require('fs');
+const path = require('path');
 const humanname = require('humanname');
+const { AuthTokenRefresh } = require('passport-oauth2-refresh');
 
 module.exports = {
+  bundle: {
+    directory: 'modules',
+    modules: getBundleModuleNames()
+  },
   init(self) {
     self.enablePassportStrategies();
   },
@@ -12,6 +19,7 @@ module.exports = {
   methods(self) {
     return {
       enablePassportStrategies() {
+        self.refresh = new AuthTokenRefresh();
         self.strategies = {};
         if (!self.apos.baseUrl) {
           throw new Error('@apostrophecms/passport-bridge: you must configure the top-level "baseUrl" option for apostrophe');
@@ -36,13 +44,17 @@ module.exports = {
           }
           // Are there strategies requiring no options? Probably not, but maybe...
           spec.options = spec.options || {};
+          const scope = spec.options.scope || spec?.authenticate?.scope;
+          spec.options.scope = spec?.authenticate?.scope;
+          spec.authenticate = spec.authenticate || {};
+          spec.authenticate.scope = spec.authenticate.scope || scope;
           if (!spec.name) {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
             // sensibly. But we can do it by making a dummy strategy object now
             const dummy = new Strategy({
               callbackURL: 'https://dummy/test',
-              passReqToCallback: self.options.retainAccessTokenInSession,
+              passReqToCallback: true,
               ...spec.options
             }, self.findOrCreateUser(spec));
             spec.name = dummy.name;
@@ -50,10 +62,11 @@ module.exports = {
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
           self.strategies[spec.name] = new Strategy({
-            passReqToCallback: self.options.retainAccessTokenInSession,
+            passReqToCallback: true,
             ...spec.options
           }, self.findOrCreateUser(spec));
           self.apos.login.passport.use(self.strategies[spec.name]);
+          self.refresh.use(self.strategies[spec.name]);
         });
       },
 
@@ -91,6 +104,13 @@ module.exports = {
         return (absolute ? (self.apos.baseUrl + self.apos.prefix) : '') + '/auth/' + spec.name + '/login';
       },
 
+      // Returns the URL used to confirm a connection to another service.
+      // Since this is used in email `absolute` is usually `true`, however
+      // it is also used to create routes.
+      getConnectUrl(strategyName, token, absolute) {
+        return (absolute ? (self.apos.baseUrl + self.apos.prefix) : '') + '/auth/' + strategyName + '/connect/' + token;
+      },
+
       // Adds the login route, which will be `/auth/strategyname/login`, where the strategy name
       // depends on the passport module being used.
       //
@@ -114,6 +134,53 @@ module.exports = {
         }, self.apos.login.passport.authenticate(spec.name, spec.authenticate));
       },
 
+      addConnectRoute(spec) {
+        self.apos.app.get(self.getConnectUrl(spec.name, ':token'), async (req, res) => {
+          const strategyName = spec.name;
+          try {
+            const token = req.params.token;
+            if (!token.length) {
+              self.apos.util.info('No token provided to connect route');
+              return res.redirect(self.getFailureUrl(spec));
+            }
+            const safe = await self.apos.user.safe.findOne({
+              [`connectionRequests.${strategyName}.token`]: token
+            });
+            if (!safe) {
+              self.apos.util.info('Token not found for connect route');
+              return res.redirect(self.getFailureUrl(spec));
+            }
+            const request = safe.connectionRequests[strategyName];
+            if (request.expiresAt < Date.now()) {
+              self.apos.util.info('Token expired for connect route');
+              return res.redirect(self.getFailureUrl(spec));
+            }
+            const nonce = self.apos.util.generateId();
+            await self.apos.user.safe.updateOne({
+              _id: safe._id
+            }, {
+              $set: {
+                [`connectionRequests.${strategyName}`]: {
+                  nonce,
+                  session: {
+                    ...req.session
+                  }
+                }
+              }
+            });
+            res.cookie('apos-connect', `${strategyName}:${nonce}`, {
+              maxAge: 1000 * 60 * 60 * 24,
+              httpOnly: true,
+              secure: (req.protocol === 'https')
+            });
+            return res.redirect(self.getLoginUrl(spec));
+          } catch (e) {
+            self.apos.util.error(e);
+            return res.redirect(self.getFailureUrl(spec));
+          }
+        });
+      },
+
       // Adds the callback route associated with a strategy. oauth-based strategies and
       // certain others redirect here to complete the login handshake
       addCallbackRoute(spec) {
@@ -122,6 +189,7 @@ module.exports = {
           self.apos.login.passport.authenticate(
             spec.name,
             {
+              ...spec.authenticate,
               failureRedirect: self.getFailureUrl(spec)
             }
           ),
@@ -155,16 +223,13 @@ module.exports = {
       // on the profile, creating them if appropriate.
 
       findOrCreateUser(spec) {
-        if (self.options.retainAccessTokenInSession) {
-          return async function(req, accessToken, refreshToken, profile, callback) {
-            return body(req, accessToken, refreshToken, profile, callback);
-          };
-        } else {
-          return async function(accessToken, refreshToken, profile, callback) {
-            return body(null, accessToken, refreshToken, profile, callback);
-          };
-        }
+        return body;
         async function body(req, accessToken, refreshToken, profile, callback) {
+          if (!req?.res) {
+            // req was not passed (strategy used does not support that), shift
+            // parameters by one so they come in under the right names
+            return body(null, req, accessToken, refreshToken, profile);
+          }
           // Always use an admin req to find the user
           const adminReq = self.apos.task.getReq();
           let criteria = {};
@@ -175,57 +240,127 @@ module.exports = {
             }
           }
 
-          const emails = self.getRelevantEmailsFromProfile(spec, profile);
-          if (spec.emailDomain && (!emails.length)) {
-            // Email domain filter is in effect and user has no emails or
-            // only emails in the wrong domain
-            return callback(null, false);
-          }
-
-          if (typeof (spec.match) === 'function') {
-            criteria = spec.match(profile);
+          const connectingUserId = req && await self.getConnectingUserId(req, spec.name);
+          if (connectingUserId) {
+            criteria._id = connectingUserId;
           } else {
-            switch (spec.match || 'username') {
-              case 'id':
-                if (!profile.id) {
-                  self.apos.util.error('@apostrophecms/passport-bridge: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
-                  return callback(null, false);
-                }
-                criteria[spec.name + 'Id'] = profile.id;
-                break;
-              case 'username':
-                if (!profile.username) {
-                  self.apos.util.error('@apostrophecms/passport-bridge: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
-                  return callback(null, false);
-                }
-                criteria.username = profile.username;
-                break;
-              case 'email':
-              case 'emails':
-                if (!emails.length) {
-                // User has no email
-                  return callback(null, false);
-                }
-                criteria.$or = emails.map(email => {
-                  return { email };
-                });
-                break;
-              default:
-                return callback(new Error(`@apostrophecms/passport-bridge: ${spec.match} is not a supported value for the match property`));
+            const emails = self.getRelevantEmailsFromProfile(spec, profile);
+            if (spec.emailDomain && (!emails.length)) {
+              // Email domain filter is in effect and user has no emails or
+              // only emails in the wrong domain
+              return callback(null, false);
+            }
+            if (typeof (spec.match) === 'function') {
+              criteria = spec.match(profile);
+            } else {
+              switch (spec.match || 'username') {
+                case 'id':
+                  if (!profile.id) {
+                    self.apos.util.error('@apostrophecms/passport-bridge: profile has no id. You probably want to set the "match" option for this strategy to "username" or "email".');
+                    return callback(null, false);
+                  }
+                  criteria[spec.name + 'Id'] = profile.id;
+                  break;
+                case 'username':
+                  if (!profile.username) {
+                    self.apos.util.error('@apostrophecms/passport-bridge: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
+                    return callback(null, false);
+                  }
+                  criteria.username = profile.username;
+                  break;
+                case 'email':
+                case 'emails':
+                  if (!emails.length) {
+                  // User has no email
+                    return callback(null, false);
+                  }
+                  criteria.$or = emails.map(email => {
+                    return { email };
+                  });
+                  break;
+                default:
+                  return callback(new Error(`@apostrophecms/passport-bridge: ${spec.match} is not a supported value for the match property`));
+              }
             }
           }
           criteria.disabled = { $ne: true };
+          if ((!connectingUserId) && (spec.login === false)) {
+            // Some strategies are only for connecting, not logging in
+            return callback(null, false);
+          }
           try {
-            const user = await self.apos.user.find(adminReq, criteria).toObject() || (self.options.create && await self.createUser(spec, profile));
+            const user = await self.apos.user.find(adminReq, criteria).toObject() || (self.options.create && !connectingUserId && await self.createUser(spec, profile));
+            // Legacy, incompatible with Passport 0.6
             if (self.options.retainAccessTokenInSession && user && req) {
               req.session.accessToken = accessToken;
               req.session.refreshToken = refreshToken;
+            }
+            // Preferred, see documentation
+            if (self.options.retainAccessToken && user) {
+              await self.apos.user.safe.updateOne({
+                _id: user._id
+              }, {
+                $set: {
+                  [`tokens.${spec.name}.accessToken`]: accessToken,
+                  [`tokens.${spec.name}.refreshToken`]: refreshToken
+                }
+              });
+            }
+            if (user) {
+              await self.apos.doc.db.updateOne({
+                _id: user._id
+              }, {
+                $set: {
+                  [`${spec.name}Id`]: profile.id
+                }
+              });
             }
             return callback(null, user || false);
           } catch (err) {
             self.apos.util.error(err);
             return callback(err);
           }
+        };
+      },
+
+      async getConnectingUserId(req, strategyName) {
+        const info = await self.getConnectingInfo(req);
+        if (strategyName && info?.strategyName !== strategyName) {
+          return false;
+        }
+        return info && info._id;
+      },
+
+      async getConnectingSession(req, strategyName) {
+        const info = await self.getConnectingInfo(req);
+        if (strategyName && info?.strategyName !== strategyName) {
+          return false;
+        }
+        return info && info.session;
+      },
+
+      async getConnectingInfo(req) {
+        const cookie = req.cookies['apos-connect'];
+        if (!cookie) {
+          return null;
+        }
+        const [ strategyName, nonce ] = cookie.split(':');
+        if (!(strategyName && nonce)) {
+          return null;
+        }
+        const safe = await self.apos.user.safe.findOne({
+          [`connectionRequests.${strategyName}.nonce`]: nonce
+        });
+        if (!safe) {
+          return null;
+        }
+        if (safe.connectionRequests[strategyName].expiresAt < Date.now()) {
+          return null;
+        }
+        return {
+          _id: safe._id,
+          session: safe.connectionRequests[strategyName].session,
+          strategyName
         };
       },
 
@@ -306,6 +441,15 @@ module.exports = {
   handlers(self) {
     return {
       '@apostrophecms/login:afterSessionLogin': {
+        async restoreConnectionSession(req) {
+          const session = await self.getConnectingSession(req);
+          if (session) {
+            for (const [ key, value ] of Object.entries(session)) {
+              req.session[key] = value;
+            }
+          }
+          req.res.clearCookie('apos-connect');
+        },
         async redirectToNewLocale(req) {
           if (!req.session.passportLocale) {
             return;
@@ -360,6 +504,7 @@ module.exports = {
             self.addLoginRoute(spec);
             self.addCallbackRoute(spec);
             self.addFailureRoute(spec);
+            self.addConnectRoute(spec);
           });
         }
       }
@@ -412,3 +557,11 @@ module.exports = {
     };
   }
 };
+
+function getBundleModuleNames() {
+  const source = path.join(__dirname, './modules/@apostrophecms');
+  return fs
+    .readdirSync(source, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => `@apostrophecms/${dirent.name}`);
+}
