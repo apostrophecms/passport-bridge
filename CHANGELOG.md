@@ -1,6 +1,6 @@
 # Changelog
 
-## UNRELEASED
+## 1.2.0 - 2023-06-08
 
 * Support for making "connections" to secondary accounts. For instance, a user whose primary account login method is email can connect
 their account to a github account when the appropriate features are active as described in the documentation.
