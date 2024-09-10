@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Adds translation strings.
+
 ## 1.2.0 - 2023-06-08
 
 * Support for making "connections" to secondary accounts. For instance, a user whose primary account login method is email can connect
