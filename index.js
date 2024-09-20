@@ -33,7 +33,9 @@ module.exports = {
           // that export a Strategy property, and directly passing in a strategy property
           // in the spec
           const strategyModule = spec.module && await self.apos.root.import(spec.module);
-          const Strategy = strategyModule ? (strategyModule.Strategy || strategyModule) : spec.Strategy;
+          const Strategy = strategyModule
+            ? (strategyModule.Strategy || strategyModule)
+            : spec.Strategy;
           if (!Strategy) {
             throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
               'giving the name of an npm module installed in your project that\n' +
@@ -111,10 +113,12 @@ module.exports = {
         return (absolute ? (self.apos.baseUrl + self.apos.prefix) : '') + '/auth/' + strategyName + '/connect/' + token;
       },
 
-      // Adds the login route, which will be `/auth/strategyname/login`, where the strategy name
+      // Adds the login route
+      // which will be `/auth/strategyname/login`, where the strategy name
       // depends on the passport module being used.
       //
-      // Redirect users to this URL to start the process of logging them in via each strategy
+      // Redirect users to this URL
+      // to start the process of logging them in via each strategy
       addLoginRoute(spec) {
         self.apos.app.get(self.getLoginUrl(spec), (req, res, next) => {
           if (req.query.newLocale) {
@@ -208,7 +212,7 @@ module.exports = {
         self.apos.app.get(self.getFailureUrl(spec), function (req, res) {
           // Gets i18n'd in the template
           return self.sendPage(req, 'error', {
-            spec: spec,
+            spec,
             message: 'aposPassportBridge:rejected'
           });
         });
@@ -289,7 +293,12 @@ module.exports = {
             return callback(null, false);
           }
           try {
-            const user = await self.apos.user.find(adminReq, criteria).toObject() || (self.options.create && !connectingUserId && await self.createUser(spec, profile));
+            const user = await self.apos.user.find(adminReq, criteria).toObject() ||
+              (
+                self.options.create &&
+                !connectingUserId &&
+                await self.createUser(spec, profile)
+              );
             // Legacy, incompatible with Passport 0.6
             if (self.options.retainAccessTokenInSession && user && req) {
               req.session.accessToken = accessToken;
@@ -473,7 +482,9 @@ module.exports = {
           }
           let route;
           if (doc) {
-            const action = self.apos.page.isPage(doc) ? self.apos.page.action : self.apos.doc.getManager(doc).action;
+            const action = self.apos.page.isPage(doc)
+              ? self.apos.page.action
+              : self.apos.doc.getManager(doc).action;
             route = `${action}/${doc._id}/locale/${newLocale}`;
           } else {
             // Fall back to home page, with appropriate prefix

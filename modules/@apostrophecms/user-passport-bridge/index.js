@@ -75,7 +75,9 @@ module.exports = {
           return await fn(accessToken);
         } catch (e) {
           if (e.status && e.status === 401) {
-            const { accessToken } = await self.refreshTokens(user, strategy, refreshToken);
+            const {
+              accessToken
+            } = await self.refreshTokens(user, strategy, refreshToken);
             // On the second try, failure is failure
             // We don't need "await" because we are already returning
             // a promise
