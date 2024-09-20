@@ -8,8 +8,8 @@ module.exports = {
     directory: 'modules',
     modules: getBundleModuleNames()
   },
-  init(self) {
-    self.enablePassportStrategies();
+  async init(self) {
+    await self.enablePassportStrategies();
   },
   options: {
     i18n: {
@@ -18,7 +18,7 @@ module.exports = {
   },
   methods(self) {
     return {
-      enablePassportStrategies() {
+      async enablePassportStrategies() {
         self.refresh = new AuthTokenRefresh();
         self.strategies = {};
         if (!self.apos.baseUrl) {
@@ -28,11 +28,11 @@ module.exports = {
           throw new Error('@apostrophecms/passport-bridge: you must configure the "strategies" option');
         }
 
-        self.options.strategies.forEach(spec => {
+        for (const spec of self.options.strategies) {
           // Works with npm modules that export the strategy directly, npm modules
           // that export a Strategy property, and directly passing in a strategy property
           // in the spec
-          const strategyModule = spec.module && self.apos.root.require(spec.module);
+          const strategyModule = spec.module && await self.apos.root.import(spec.module);
           const Strategy = strategyModule ? (strategyModule.Strategy || strategyModule) : spec.Strategy;
           if (!Strategy) {
             throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
@@ -67,7 +67,7 @@ module.exports = {
           }, self.findOrCreateUser(spec));
           self.apos.login.passport.use(self.strategies[spec.name]);
           self.refresh.use(self.strategies[spec.name]);
-        });
+        };
       },
 
       // Returns the oauth2 callback URL, which must match the route
