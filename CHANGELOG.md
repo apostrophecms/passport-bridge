@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 (2024-10-03)
 
 * Adds translation strings.
 
