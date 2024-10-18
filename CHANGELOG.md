@@ -2,9 +2,12 @@
 
 ## UNRELEASED
 
-* Adds translation strings.
 * Use `self.apos.root.import` instead of `self.apos.root.require`.
 * `enablePassportStrategies` is now async.
+
+## 1.2.1 (2024-10-03)
+
+* Adds translation strings.
 
 ## 1.2.0 - 2023-06-08
 
@@ -14,7 +17,7 @@ their account to a github account when the appropriate features are active as de
 pass it on to the strategy in both ways, as well as to both the login and callback routes. This allows `passport-github2`
 to capture the user's private email address correctly, and should help with other differences between strategies as well.
 * Back to using upstream `passport-oauth2-refresh` now that our PR has been accepted (thanks).
- 
+
 ## 1.2.0-alpha.4 - 2023-04-07
 
 * More dependency games.
