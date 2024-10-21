@@ -1,5 +1,10 @@
 # Changelog
 
+## UNRELEASED
+
+* Use `self.apos.root.import` instead of `self.apos.root.require`.
+* `enablePassportStrategies` is now async.
+
 ## 1.2.1 (2024-10-03)
 
 * Adds translation strings.
@@ -12,7 +17,7 @@ their account to a github account when the appropriate features are active as de
 pass it on to the strategy in both ways, as well as to both the login and callback routes. This allows `passport-github2`
 to capture the user's private email address correctly, and should help with other differences between strategies as well.
 * Back to using upstream `passport-oauth2-refresh` now that our PR has been accepted (thanks).
- 
+
 ## 1.2.0-alpha.4 - 2023-04-07
 
 * More dependency games.
@@ -48,4 +53,3 @@ Declared stable. No code changes.
 ## 1.0.0-beta - 2022-01-06
 
 Initial release for A3. Tested and working with Google and Okta. Other standard passport modules should also work, especially those based on OpenAuth.
-
