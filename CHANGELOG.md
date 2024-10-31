@@ -1,6 +1,6 @@
 # Changelog
 
-## UNRELEASED
+## 1.3.0 (2024-10-31)
 
 * Use `self.apos.root.import` instead of `self.apos.root.require`.
 * `enablePassportStrategies` is now async.
