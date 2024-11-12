@@ -188,27 +188,31 @@ module.exports = {
       // Adds the callback route associated with a strategy. oauth-based strategies and
       // certain others redirect here to complete the login handshake
       addCallbackRoute(spec) {
-        self.apos.app.get(self.getCallbackUrl(spec, false),
-          // middleware
-          self.apos.login.passport.authenticate(
-            spec.name,
-            {
-              ...spec.authenticate,
-              failureRedirect: self.getFailureUrl(spec)
-            }
-          ),
-          // The actual route reached after authentication redirects
-          // appropriately, either to an explicitly requested location
-          // or the home page
-          (req, res) => {
-            const redirect = req.session.passportRedirect || '/';
-            delete req.session.passportRedirect;
-            return res.rawRedirect(redirect);
+        const url = self.getCallbackUrl(spec, false);
+        const middleware = self.apos.login.passport.authenticate(
+          spec.name,
+          {
+            ...spec.authenticate,
+            failureRedirect: self.getFailureUrl(spec)
           }
         );
+        const route = (req, res) => {
+          const redirect = req.session.passportRedirect || '/';
+          delete req.session.passportRedirect;
+          console.log(`*** The final redirect is: ${redirect}`);
+          return res.rawRedirect(redirect);
+        };
+        self.apos.app.get(url, middleware, route);
+        // Undocumented feature of passport-oauth2: POST requests are
+        // also accepted, and some identity providers do submit a form
+        // with a hidden "code" field to avoid passing data in a URL
+        self.apos.app.post(url, (req, res, next) => {
+          console.log(`We are here in ${req.url}:`, JSON.stringify(req.body));
+          return next();
+        }, middleware, route);
       },
-
       addFailureRoute(spec) {
+        console.log('** in the failure route');
         self.apos.app.get(self.getFailureUrl(spec), function (req, res) {
           // Gets i18n'd in the template
           return self.sendPage(req, 'error', {
