@@ -87,6 +87,79 @@ module.exports = {
 > `match` option. If you want to automatically create users in Apostrophe,
 > see [creating users on demand](#creating-users-on-demand) below.
 
+### Customizing call to the strategy verify method
+
+At the end of the login process, `@apostrophecms/passport-bridge` will call a method `findOrCreateUser(req, accessToken, refreshToken, profile, callback)`.
+
+This method is responsible for retrieving the user in the ApostropheCMS database, or creating it. It is the `@apostrophecms/passport-bridge` equivalent of the strategy `verify` method.
+
+The default signature is `req` plus the parameters for the passport strategy verify method signature `accessToken`, `refreshToken`, `profile`, `callback`. This is accurate for `passport-oauth2`, `passport-github2` and `passport-gitlab2`.
+
+For example in `passport-oauth2`, the documentation shows the following
+
+```javascript
+// https://www.passportjs.org/packages/passport-oauth2/
+passport.use(new OAuth2Strategy({
+    authorizationURL: 'https://www.example.com/oauth2/authorize',
+    tokenURL: 'https://www.example.com/oauth2/token',
+    clientID: EXAMPLE_CLIENT_ID,
+    clientSecret: EXAMPLE_CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/example/callback"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    User.findOrCreate({ exampleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
+```
+
+The second parameter of the strategy is the stratey `verify` method (`accessToken`, `refreshToken`, `profile`, `done`).
+
+If you're using `passport-auth0` or any other auth strategy for which the strategy `verify` method is different, please use the new `@apostrophecms/passport-bridge` `verify` options.
+
+```javascript
+// https://www.passportjs.org/packages/passport-auth0/
+const Auth0Strategy = require('passport-auth0');
+const strategy = new Auth0Strategy({
+     // ...
+     state: false
+  },
+  function(accessToken, refreshToken, extraParams, profile, done) {
+    // ...
+  }
+);
+```
+
+To solve this, you can do the following
+
+```javascript
+module.exports = {
+  // In modules/@apostrophecms/passport-bridge/index.js
+  options: {
+    strategies: [
+      {
+        module: 'passport-auth0',
+        options: {
+          // ...
+          verify: findOrCreateUser =>
+            async (req, accessToken, refreshToken, extraParams, profile, done) =>
+              findOrCreateUser(req, accessToken, refreshToken, profile, done)
+          }
+        },
+        // ...
+      }
+    ]
+  }
+};
+```
+
+`verify` is function with a single parameter `findOrCreateUser`. `self.findOrCreateUser(spec)` will be passed as argument internally.
+
+It should return an async function with `req` plus all the original strategy `verify` method parameters.
+
+It in turn, return the result of `findOrCreateUser` with the appropriate parameter mapping for `accessToken`, `refreshToken`, `profile` and `done`.
+
 ### Adding login links
 
 The easiest way to enable login is to use the `loginLinks` async component in your template:
@@ -279,7 +352,7 @@ behavior is more consistent, but still undesirable: a separate account is always
 This can be addressed via the following flow:
 
 1. The user logs in normally to their Apostrophe account.
- 
+
 2. Await `requestConnection` to generate a confirmation link and email it
 to the current user's email address. When this method resolves, the email has been
 handed off for delivery, and it is appropriate to tell the user to expect it soon.
