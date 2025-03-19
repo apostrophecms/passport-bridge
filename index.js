@@ -50,6 +50,15 @@ module.exports = {
           spec.options.scope = spec?.authenticate?.scope;
           spec.authenticate = spec.authenticate || {};
           spec.authenticate.scope = spec.authenticate.scope || scope;
+
+          // Must be a function that accepts self.findOrCreateUser and
+          // return an async function with 5 parameters
+          // (findOrCreateUser) =>
+          //   async function (req, accessToken, refreshToken, profile, callback)
+          // or if there is no req
+          //   async function (null, accessToken, refreshToken, profile, callback)
+          const { verify = (findOrCreateUser) => findOrCreateUser } = spec.options;
+
           if (!spec.name) {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
@@ -58,7 +67,7 @@ module.exports = {
               callbackURL: 'https://dummy/test',
               passReqToCallback: true,
               ...spec.options
-            }, self.findOrCreateUser(spec));
+            }, verify(self.findOrCreateUser(spec)));
             spec.name = dummy.name;
           }
           spec.label = spec.label || spec.name;
@@ -66,7 +75,7 @@ module.exports = {
           self.strategies[spec.name] = new Strategy({
             passReqToCallback: true,
             ...spec.options
-          }, self.findOrCreateUser(spec));
+          }, verify(self.findOrCreateUser(spec)));
           self.apos.login.passport.use(self.strategies[spec.name]);
           self.refresh.use(self.strategies[spec.name]);
         };
@@ -229,7 +238,7 @@ module.exports = {
       findOrCreateUser(spec) {
         return body;
         async function body(req, accessToken, refreshToken, profile, callback) {
-          if (!req?.res) {
+          if (req !== null && !req?.res) {
             // req was not passed (strategy used does not support that), shift
             // parameters by one so they come in under the right names
             return body(null, req, accessToken, refreshToken, profile);
