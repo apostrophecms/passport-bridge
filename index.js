@@ -52,11 +52,20 @@ module.exports = {
           spec.authenticate.scope = spec.authenticate.scope || scope;
 
           // Must be a function that accepts self.findOrCreateUser and
-          // return an async function with 5 parameters
+          // returns an async function that calls self.findOrCreateUser with 5 parameters
           // (findOrCreateUser) =>
-          //   async function (req, accessToken, refreshToken, profile, callback)
-          // or if there is no req
-          //   async function (null, accessToken, refreshToken, profile, callback)
+          //   async (req, accessToken, refreshToken, profile, callback) =>
+          //     findOrCreateUser(req, accessToken, refreshToken, profile, callback)
+          //
+          // If there is no req, you can pass null instead
+          // (findOrCreateUser) =>
+          //   async (accessToken, refreshToken, profile, callback) =>
+          //     findOrCreateUser(null, accessToken, refreshToken, profile, callback)
+          //
+          // You can also remap parameters
+          // (findOrCreateUser) =>
+          //   async (req, accessToken, refreshToken, extraParams, profile, callback) =>
+          //     findOrCreateUser(req, accessToken, refreshToken, profile, callback)
           const { verify = (findOrCreateUser) => findOrCreateUser } = spec.options;
 
           if (!spec.name) {

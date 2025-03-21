@@ -89,11 +89,9 @@ module.exports = {
 
 ### Customizing call to the strategy verify method
 
-At the end of the login process, `@apostrophecms/passport-bridge` will call a method `findOrCreateUser(req, accessToken, refreshToken, profile, callback)`.
+All passport strategies expect us to provide a `verify` callback. By default, `@apostrophecms/passport-bridge` passes its `findOrCreateUser` function as the `verify` callback, which works for many strategies including `passport-oauth2`, `passport-github2` and `passport-gitlab2`. For other strategies, you can pass an explicit `verify` option which will remap the strategy `verify` method with `@apostrophecms/passport-bridge` `findOrCreateUser` method.
 
 This method is responsible for retrieving the user in the ApostropheCMS database, or creating it. It is the `@apostrophecms/passport-bridge` equivalent of the strategy `verify` method.
-
-The default signature is `req` plus the parameters for the passport strategy verify method signature `accessToken`, `refreshToken`, `profile`, `callback`. This is accurate for `passport-oauth2`, `passport-github2` and `passport-gitlab2`.
 
 For example in `passport-oauth2`, the documentation shows the following
 
@@ -116,7 +114,31 @@ passport.use(new OAuth2Strategy({
 
 The second parameter of the strategy is the stratey `verify` method (`accessToken`, `refreshToken`, `profile`, `done`).
 
-If you're using `passport-auth0` or any other auth strategy for which the strategy `verify` method is different, please use the new `@apostrophecms/passport-bridge` `verify` options.
+The default value for the `verify` option is equivalent to the following
+
+```javascript
+module.exports = {
+  // In modules/@apostrophecms/passport-bridge/index.js
+  options: {
+    strategies: [
+      {
+        module: 'passport-oauth2|passport-github2|passport-gitlab2',
+        options: {
+          // ...
+          // Default value for the verify option
+          // verify: findOrCreateUser =>
+          //   async (req, accessToken, refreshToken, profile, done) =>
+          //     findOrCreateUser(req, accessToken, refreshToken, profile, done)
+          }
+        },
+        // ...
+      }
+    ]
+  }
+};
+```
+
+If you're using `passport-auth0` or any other auth strategy for which the strategy `verify` method is different, please use the new `@apostrophecms/passport-bridge` `verify` option.
 
 ```javascript
 // https://www.passportjs.org/packages/passport-auth0/
@@ -154,11 +176,11 @@ module.exports = {
 };
 ```
 
-`verify` is function with a single parameter `findOrCreateUser`. `self.findOrCreateUser(spec)` will be passed as argument internally.
+`verify` is a function with a single parameter `findOrCreateUser`. `self.findOrCreateUser(spec)` will be passed to your verify function as the `findOrCreateUser` argument.
 
-It should return an async function with `req` plus all the original strategy `verify` method parameters.
+Your `verify` function should return an async function which accepts `req` plus all of the `verify` parameters your particular strategy expects.
 
-It in turn, return the result of `findOrCreateUser` with the appropriate parameter mapping for `accessToken`, `refreshToken`, `profile` and `done`.
+That function, in turn, return the result of `findOrCreateUser` with the appropriate parameter mapping for `accessToken`, `refreshToken`, `profile` and `done`.
 
 ### Adding login links
 
