@@ -1,5 +1,14 @@
 # Changelog
 
+## UNRELEASED
+
+* Adds strategy option `verify`. `verify` is a function that accepts `findOrCreateUser` and returns a function
+The default `findOrCreateUser` method returns a function that accepts 5 parameters `req` plus `accessToken`, `refreshToken`, `profile` and `callback`.
+This is the default for some strategies like `passport-oauth2`, `passport-github2` and `passport-gitlab2`.
+If the passport strategy you're using have a different set of parameters outside of `req` (for example `passport-auth0`), please use the `verify` options.
+More info at [Customizing call to the strategy verify method](/#customizing-call-to-the-strategy-verify-method)
+* Fix infinite loop issue with `findOrCreateUser` without `req` parameter.
+
 ## 1.3.0 (2024-10-31)
 
 * Use `self.apos.root.import` instead of `self.apos.root.require`.
