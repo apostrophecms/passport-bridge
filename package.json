@@ -18,11 +18,6 @@
   "devDependencies": {
     "eslint": "^8.57.1",
     "eslint-config-apostrophe": "^4.3.0",
-    "eslint-config-standard": "^17.1.0",
-    "eslint-plugin-import": "^2.22.0",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^6.6.0",
-    "eslint-plugin-standard": "^4.0.1",
     "stylelint": "^16.9.0",
     "stylelint-config-apostrophe": "^4.1.0"
   },
