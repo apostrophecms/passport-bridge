@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const humanname = require('humanname');
+const { klona } = require('klona');
 const { AuthTokenRefresh } = require('passport-oauth2-refresh');
 
 module.exports = {
@@ -33,7 +34,7 @@ module.exports = {
         }
 
         for (const strategy of self.options.strategies) {
-          const spec = structuredClone(strategy);
+          const spec = klona(strategy);
           // Works with npm modules that export the strategy directly, npm modules
           // that export a Strategy property, and directly passing in a strategy property
           // in the spec
