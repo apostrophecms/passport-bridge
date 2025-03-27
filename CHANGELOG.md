@@ -8,6 +8,8 @@ This is the default for some strategies like `passport-oauth2`, `passport-github
 If the passport strategy you're using have a different set of parameters outside of `req` (for example `passport-auth0`), please use the `verify` options.
 More info at [Customizing call to the strategy verify method](/#customizing-call-to-the-strategy-verify-method)
 * Fix infinite loop issue with `findOrCreateUser` without `req` parameter.
+* Remove `self.apos.root.import` usage.
+* Add `self.specs` with the computed strategies options.
 
 ## 1.3.0 (2024-10-31)
 

@@ -14,12 +14,16 @@ module.exports = {
   options: {
     i18n: {
       ns: 'aposPassportBridge'
-    }
+    },
+    create: undefined, // { role: 'guest' }
+    retainAccessTokenInSession: false, // Legacy, incompatible with Passport 0.6
+    retainAccessToken: false
   },
   methods(self) {
     return {
       async enablePassportStrategies() {
         self.refresh = new AuthTokenRefresh();
+        self.specs = {};
         self.strategies = {};
         if (!self.apos.baseUrl) {
           throw new Error('@apostrophecms/passport-bridge: you must configure the top-level "baseUrl" option for apostrophe');
@@ -28,11 +32,12 @@ module.exports = {
           throw new Error('@apostrophecms/passport-bridge: you must configure the "strategies" option');
         }
 
-        for (const spec of self.options.strategies) {
+        for (const strategy of self.options.strategies) {
+          const spec = structuredClone(strategy);
           // Works with npm modules that export the strategy directly, npm modules
           // that export a Strategy property, and directly passing in a strategy property
           // in the spec
-          const strategyModule = spec.module && await self.apos.root.import(spec.module);
+          const strategyModule = spec.module && await import(spec.module);
           const Strategy = strategyModule
             ? (strategyModule.Strategy || strategyModule)
             : spec.Strategy;
@@ -81,6 +86,7 @@ module.exports = {
           }
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
+          self.specs[spec.name] = spec;
           self.strategies[spec.name] = new Strategy({
             passReqToCallback: true,
             ...spec.options
@@ -529,7 +535,7 @@ module.exports = {
       },
       'apostrophe:modulesRegistered': {
         addRoutes() {
-          self.options.strategies.forEach(spec => {
+          Object.values(self.specs).forEach(spec => {
             self.addLoginRoute(spec);
             self.addCallbackRoute(spec);
             self.addFailureRoute(spec);
@@ -545,15 +551,16 @@ module.exports = {
         usage: 'Run this task to list the login URLs for each registered strategy.\n' +
         'This is helpful when writing markup to invite users to log in.',
         task: () => {
+          const specs = Object.values(self.specs);
           // eslint-disable-next-line no-console
           console.log('These are the login URLs you may wish to link users to:\n');
-          self.options.strategies.forEach(spec => {
+          specs.forEach(spec => {
             // eslint-disable-next-line no-console
             console.log(`${spec.label}: ${self.getLoginUrl(spec, true)}`);
           });
           // eslint-disable-next-line no-console
           console.log('\nThese are the callback URLs you may need to configure on sites:\n');
-          self.options.strategies.forEach(spec => {
+          specs.forEach(spec => {
             // eslint-disable-next-line no-console
             console.log(`${spec.label}: ${self.getCallbackUrl(spec, true)}`);
           });
@@ -565,7 +572,7 @@ module.exports = {
     return {
       loginLinks(req, data) {
         return {
-          links: self.options.strategies.map(spec => {
+          links: Object.values(self.specs).map(spec => {
             let href = self.getLoginUrl(spec, true);
             if (Object.keys(self.apos.i18n.locales).length > 1) {
               const context = req.data.piece || req.data.page;
