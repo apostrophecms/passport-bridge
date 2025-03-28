@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const humanname = require('humanname');
+const { klona } = require('klona');
 const { AuthTokenRefresh } = require('passport-oauth2-refresh');
 
 module.exports = {
@@ -14,12 +15,16 @@ module.exports = {
   options: {
     i18n: {
       ns: 'aposPassportBridge'
-    }
+    },
+    create: undefined, // { role: 'guest' }
+    retainAccessTokenInSession: false, // Legacy, incompatible with Passport 0.6
+    retainAccessToken: false
   },
   methods(self) {
     return {
       async enablePassportStrategies() {
         self.refresh = new AuthTokenRefresh();
+        self.specs = {};
         self.strategies = {};
         if (!self.apos.baseUrl) {
           throw new Error('@apostrophecms/passport-bridge: you must configure the top-level "baseUrl" option for apostrophe');
@@ -28,11 +33,12 @@ module.exports = {
           throw new Error('@apostrophecms/passport-bridge: you must configure the "strategies" option');
         }
 
-        for (const spec of self.options.strategies) {
+        for (const strategy of self.options.strategies) {
+          const spec = klona(strategy);
           // Works with npm modules that export the strategy directly, npm modules
           // that export a Strategy property, and directly passing in a strategy property
           // in the spec
-          const strategyModule = spec.module && await self.apos.root.import(spec.module);
+          const strategyModule = spec.module && await import(spec.module);
           const Strategy = strategyModule
             ? (strategyModule.Strategy || strategyModule)
             : spec.Strategy;
@@ -50,6 +56,24 @@ module.exports = {
           spec.options.scope = spec?.authenticate?.scope;
           spec.authenticate = spec.authenticate || {};
           spec.authenticate.scope = spec.authenticate.scope || scope;
+
+          // Must be a function that accepts self.findOrCreateUser and
+          // returns an async function that calls self.findOrCreateUser with 5 parameters
+          // (findOrCreateUser) =>
+          //   async (req, accessToken, refreshToken, profile, callback) =>
+          //     findOrCreateUser(req, accessToken, refreshToken, profile, callback)
+          //
+          // If there is no req, you can pass null instead
+          // (findOrCreateUser) =>
+          //   async (accessToken, refreshToken, profile, callback) =>
+          //     findOrCreateUser(null, accessToken, refreshToken, profile, callback)
+          //
+          // You can also remap parameters
+          // (findOrCreateUser) =>
+          //   async (req, accessToken, refreshToken, extraParams, profile, callback) =>
+          //     findOrCreateUser(req, accessToken, refreshToken, profile, callback)
+          const { verify = (findOrCreateUser) => findOrCreateUser } = spec.options;
+
           if (!spec.name) {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
@@ -58,15 +82,16 @@ module.exports = {
               callbackURL: 'https://dummy/test',
               passReqToCallback: true,
               ...spec.options
-            }, self.findOrCreateUser(spec));
+            }, verify(self.findOrCreateUser(spec)));
             spec.name = dummy.name;
           }
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
+          self.specs[spec.name] = spec;
           self.strategies[spec.name] = new Strategy({
             passReqToCallback: true,
             ...spec.options
-          }, self.findOrCreateUser(spec));
+          }, verify(self.findOrCreateUser(spec)));
           self.apos.login.passport.use(self.strategies[spec.name]);
           self.refresh.use(self.strategies[spec.name]);
         };
@@ -229,7 +254,7 @@ module.exports = {
       findOrCreateUser(spec) {
         return body;
         async function body(req, accessToken, refreshToken, profile, callback) {
-          if (!req?.res) {
+          if (req !== null && !req?.res) {
             // req was not passed (strategy used does not support that), shift
             // parameters by one so they come in under the right names
             return body(null, req, accessToken, refreshToken, profile);
@@ -511,7 +536,7 @@ module.exports = {
       },
       'apostrophe:modulesRegistered': {
         addRoutes() {
-          self.options.strategies.forEach(spec => {
+          Object.values(self.specs).forEach(spec => {
             self.addLoginRoute(spec);
             self.addCallbackRoute(spec);
             self.addFailureRoute(spec);
@@ -527,15 +552,16 @@ module.exports = {
         usage: 'Run this task to list the login URLs for each registered strategy.\n' +
         'This is helpful when writing markup to invite users to log in.',
         task: () => {
+          const specs = Object.values(self.specs);
           // eslint-disable-next-line no-console
           console.log('These are the login URLs you may wish to link users to:\n');
-          self.options.strategies.forEach(spec => {
+          specs.forEach(spec => {
             // eslint-disable-next-line no-console
             console.log(`${spec.label}: ${self.getLoginUrl(spec, true)}`);
           });
           // eslint-disable-next-line no-console
           console.log('\nThese are the callback URLs you may need to configure on sites:\n');
-          self.options.strategies.forEach(spec => {
+          specs.forEach(spec => {
             // eslint-disable-next-line no-console
             console.log(`${spec.label}: ${self.getCallbackUrl(spec, true)}`);
           });
@@ -547,7 +573,7 @@ module.exports = {
     return {
       loginLinks(req, data) {
         return {
-          links: self.options.strategies.map(spec => {
+          links: Object.values(self.specs).map(spec => {
             let href = self.getLoginUrl(spec, true);
             if (Object.keys(self.apos.i18n.locales).length > 1) {
               const context = req.data.piece || req.data.page;
