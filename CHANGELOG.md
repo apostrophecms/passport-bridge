@@ -1,5 +1,11 @@
 # Changelog
 
+## UNRELEASED
+
+### Changes
+
+* Bumbs `eslint-config-apostrophe` to `5`, fixes errors, removes unused dependencies.
+
 ## 1.3.0 (2024-10-31)
 
 * Use `self.apos.root.import` instead of `self.apos.root.require`.
