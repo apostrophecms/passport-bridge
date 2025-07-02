@@ -219,7 +219,8 @@ module.exports = {
             spec.name,
             {
               ...spec.authenticate,
-              failureRedirect: self.getFailureUrl(spec)
+              failureRedirect: self.getFailureUrl(spec),
+              failureMessage: true
             }
           ),
           // The actual route reached after authentication redirects
@@ -236,6 +237,7 @@ module.exports = {
       addFailureRoute(spec) {
         self.apos.app.get(self.getFailureUrl(spec), function (req, res) {
           // Gets i18n'd in the template
+          console.log('**', req.session);
           return self.sendPage(req, 'error', {
             spec,
             message: 'aposPassportBridge:rejected'
