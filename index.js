@@ -214,21 +214,25 @@ module.exports = {
       // certain others redirect here to complete the login handshake
       addCallbackRoute(spec) {
         self.apos.app.get(self.getCallbackUrl(spec, false),
-          // middleware
-          self.apos.login.passport.authenticate(
-            spec.name,
-            {
-              ...spec.authenticate,
-              failureRedirect: self.getFailureUrl(spec)
-            }
-          ),
-          // The actual route reached after authentication redirects
-          // appropriately, either to an explicitly requested location
-          // or the home page
           (req, res) => {
-            const redirect = req.session.passportRedirect || '/';
-            delete req.session.passportRedirect;
-            return res.rawRedirect(redirect);
+            self.apos.login.passport.authenticate(
+              spec.name,
+              spec.authenticate,
+              (err, user, info) => {
+                console.error('err:', err, 'user:', user, 'info:', info);
+                if (err) {
+                  console.error('error is:', err);
+                  return res.redirect(self.getFailureUrl(spec));
+                }
+                if (!user) {
+                  console.error('no user');
+                  return res.redirect(self.getFailureUrl(spec));
+                }
+                const redirect = req.session.passportRedirect || '/';
+                delete req.session.passportRedirect;
+                return res.rawRedirect(redirect);
+              }
+            );
           }
         );
       },
