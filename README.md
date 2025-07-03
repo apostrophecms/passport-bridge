@@ -348,8 +348,7 @@ You may enable more than one strategy at the same time. Just configure them cons
 When we authenticate the user via an identity provider like `github` that has APIs
 of its own, it is often desirable to call additional APIs of that provider.
 
-Setting the `retainAccessToken` option to `true` retains the `accessToken` and `refreshToken` in Apostrophe's
-"safe," which is a special storage place for sensitive data associated with a user.
+Setting the `retainAccessToken` option to `true` retains the `accessToken` and `refreshToken` in Apostrophe's "safe," which is a special storage place for sensitive data associated with a user.
 
 You can then access that data like this:
 
