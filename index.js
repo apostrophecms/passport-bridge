@@ -4,6 +4,8 @@ const humanname = require('humanname');
 const { klona } = require('klona');
 const { AuthTokenRefresh } = require('passport-oauth2-refresh');
 
+console.log('sane');
+
 module.exports = {
   bundle: {
     directory: 'modules',
@@ -266,6 +268,7 @@ module.exports = {
       findOrCreateUser(spec) {
         return body;
         async function body(req, accessToken, refreshToken, profile, callback) {
+          console.log('in findOrCreateUser');
           if (req !== null && !req?.res) {
             // req was not passed (strategy used does not support that), shift
             // parameters by one so they come in under the right names
@@ -277,6 +280,10 @@ module.exports = {
 
           if (spec.accept) {
             if (!spec.accept(profile)) {
+              self.logInfo(req, 'rejectedProfile', {
+                strategyName: spec.name,
+                profile
+              });
               return callback(null, false);
             }
           }
@@ -289,6 +296,11 @@ module.exports = {
             if (spec.emailDomain && (!emails.length)) {
               // Email domain filter is in effect and user has no emails or
               // only emails in the wrong domain
+              self.logInfo(req, 'noEmailAndEmailDomainIsSet', {
+                strategyName: spec.name,
+                requiredEmailDomain: spec.emailDomain,
+                profile
+              });
               return callback(null, false);
             }
             if (typeof (spec.match) === 'function') {
@@ -312,7 +324,11 @@ module.exports = {
                 case 'email':
                 case 'emails':
                   if (!emails.length) {
-                  // User has no email
+                    // User has no email
+                    self.logInfo(req, 'noEmailAndEmailIsId', {
+                      strategyName: spec.name,
+                      profile
+                    });
                     return callback(null, false);
                   }
                   criteria.$or = emails.map(email => {
@@ -327,15 +343,32 @@ module.exports = {
           criteria.disabled = { $ne: true };
           if ((!connectingUserId) && (spec.login === false)) {
             // Some strategies are only for connecting, not logging in
+            self.logInfo(req, 'strategyNotForLogin', {
+              strategyName: spec.name,
+              profile 
+            });
             return callback(null, false);
           }
           try {
-            const user = await self.apos.user.find(adminReq, criteria).toObject() ||
-              (
-                self.options.create &&
-                !connectingUserId &&
-                await self.createUser(spec, profile)
-              );
+            let user;
+            const foundUser = await self.apos.user.find(adminReq, criteria).toObject();
+            if (foundUser) {
+              self.logInfo(req, 'userFound', {
+                strategyName: spec.name,
+                profile, 
+                foundUser
+              });
+              user = foundUser;
+            }
+            if (!foundUser && self.options.create && !connectingUserId) {
+              const createdUser = await self.createUser(spec, profile);
+              self.logInfo(req, 'userCreated', {
+                strategyName: spec.name,
+                profile, 
+                createdUser
+              });
+              user = createdUser;
+            }
             // Legacy, incompatible with Passport 0.6
             if (self.options.retainAccessTokenInSession && user && req) {
               req.session.accessToken = accessToken;
@@ -359,6 +392,18 @@ module.exports = {
                 $set: {
                   [`${spec.name}Id`]: profile.id
                 }
+              });
+            }
+            if (!user) {
+              self.logInfo(req, 'noUserFound', {
+                strategyName: spec.name,
+                profile
+              });
+            } else {
+              self.logInfo(req, 'findOrCreateUserSuccessful', {
+                strategyName: spec.name,
+                profile,
+                user
               });
             }
             return callback(null, user || false);
