@@ -1,10 +1,11 @@
 # Changelog
 
-## UNRELEASED
+## 1.5.0-beta.1 (2025-07-03)
 
 ### Adds
 
 * The new `factory` option allows developers to pass an async function that returns a fully initialized passport strategy object. This allows developers to solve many exactly problems as they see fit, in one single place: taking care of discovery before initialization, initializing strategies that won't accept a plain object of parameters, remapping `verify` parameters, and remapping profile properties.
+* Structured logging has been added, helping to debug in many situations. The debug log level is used, so by default it won't clutter the logs in production.
 
 ## 1.4.0 (2025-04-16)
 
