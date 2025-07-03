@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 (2025-07-03)
+
+### Adds
+
+* The new `factory` option allows developers to pass an async function that returns a fully initialized passport strategy object. This allows developers to solve many exactly problems as they see fit, in one single place: taking care of discovery before initialization, initializing strategies that won't accept a plain object of parameters, remapping `verify` parameters, and remapping profile properties.
+
 ## 1.4.0 (2025-04-16)
 
 ### Adds

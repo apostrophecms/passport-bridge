@@ -33,23 +33,30 @@ module.exports = {
           throw new Error('@apostrophecms/passport-bridge: you must configure the "strategies" option');
         }
 
-        for (const strategy of self.options.strategies) {
-          const spec = klona(strategy);
+        for (let spec of self.options.strategies) {
+          spec = klona(spec);
           // Works with npm modules that export the strategy directly, npm modules
           // that export a Strategy property, and directly passing in a strategy property
           // in the spec
           const strategyModule = spec.module && await import(spec.module);
-          const Strategy = strategyModule
-            ? (strategyModule.Strategy || strategyModule)
-            : spec.Strategy;
-          if (!Strategy) {
-            throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
-              'giving the name of an npm module installed in your project that\n' +
-              'is passport-oauth2, passport-oauth or a subclass with a compatible\n' +
-              'interface, such as passport-gitlab2, passport-twitter, etc.\n\n' +
-              'You may instead pass a strategy constructor as a Strategy property,\n' +
-              'but the other way is much more convenient.');
-          }
+
+          const factory = spec.factory || ((...args) => {
+            const Strategy = strategyModule
+              ? (strategyModule.Strategy || strategyModule)
+              : spec.Strategy;
+            if (!Strategy) {
+              throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
+                'giving the name of an npm module installed in your project such\n' +
+                'as passport-oauth2, passport-oauth or a subclass with a compatible\n' +
+                'interface, such as passport-gitlab2, passport-twitter, etc.\n\n' +
+                'You may instead pass a "factory" async function that takes the configuration and\n' +
+                'returns a strategy object.\n\nFinally, for bc, you may pass a strategy constructor as a\n' +
+                'Strategy property.\n\nThe factory function is the most flexible option.'
+              );
+            }
+            return new Strategy(...args);
+          });
+
           // Are there strategies requiring no options? Probably not, but maybe...
           spec.options = spec.options || {};
           const scope = spec.options.scope || spec?.authenticate?.scope;
@@ -78,8 +85,8 @@ module.exports = {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
             // sensibly. But we can do it by making a dummy strategy object now
-            const dummy = new Strategy({
-              callbackURL: 'https://dummy/test',
+            const dummy = await factory({
+              callbackURL: 'https://dummy.localhost/test',
               passReqToCallback: true,
               ...spec.options
             }, verify(self.findOrCreateUser(spec)));
@@ -88,12 +95,16 @@ module.exports = {
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
           self.specs[spec.name] = spec;
-          self.strategies[spec.name] = new Strategy({
+          const strategy = await factory({
             passReqToCallback: true,
             ...spec.options
           }, verify(self.findOrCreateUser(spec)));
-          self.apos.login.passport.use(self.strategies[spec.name]);
-          self.refresh.use(self.strategies[spec.name]);
+          self.strategies[spec.name] = strategy;
+          self.apos.login.passport.use(strategy);
+          if (strategy._oauth2) {
+            // This will only work with strategies that actually have an _oauth2 object
+            self.refresh.use(self.strategies[spec.name]);
+          }
         };
       },
 
@@ -237,7 +248,6 @@ module.exports = {
       addFailureRoute(spec) {
         self.apos.app.get(self.getFailureUrl(spec), function (req, res) {
           // Gets i18n'd in the template
-          console.log('**', req.session);
           return self.sendPage(req, 'error', {
             spec,
             message: 'aposPassportBridge:rejected'
