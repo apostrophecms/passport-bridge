@@ -4,8 +4,6 @@ const humanname = require('humanname');
 const { klona } = require('klona');
 const { AuthTokenRefresh } = require('passport-oauth2-refresh');
 
-console.log('sane');
-
 module.exports = {
   bundle: {
     directory: 'modules',
