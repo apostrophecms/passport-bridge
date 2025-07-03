@@ -230,8 +230,7 @@ module.exports = {
             spec.name,
             {
               ...spec.authenticate,
-              failureRedirect: self.getFailureUrl(spec),
-              failureMessage: true
+              failureRedirect: self.getFailureUrl(spec)
             }
           ),
           // The actual route reached after authentication redirects
