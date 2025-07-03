@@ -268,7 +268,6 @@ module.exports = {
       findOrCreateUser(spec) {
         return body;
         async function body(req, accessToken, refreshToken, profile, callback) {
-          console.log('in findOrCreateUser');
           if (req !== null && !req?.res) {
             // req was not passed (strategy used does not support that), shift
             // parameters by one so they come in under the right names
@@ -280,7 +279,7 @@ module.exports = {
 
           if (spec.accept) {
             if (!spec.accept(profile)) {
-              self.logInfo(req, 'rejectedProfile', {
+              self.logDebug(req, 'rejectedProfile', {
                 strategyName: spec.name,
                 profile
               });
@@ -296,7 +295,7 @@ module.exports = {
             if (spec.emailDomain && (!emails.length)) {
               // Email domain filter is in effect and user has no emails or
               // only emails in the wrong domain
-              self.logInfo(req, 'noEmailAndEmailDomainIsSet', {
+              self.logDebug(req, 'noEmailAndEmailDomainIsSet', {
                 strategyName: spec.name,
                 requiredEmailDomain: spec.emailDomain,
                 profile
@@ -325,7 +324,7 @@ module.exports = {
                 case 'emails':
                   if (!emails.length) {
                     // User has no email
-                    self.logInfo(req, 'noEmailAndEmailIsId', {
+                    self.logDebug(req, 'noEmailAndEmailIsId', {
                       strategyName: spec.name,
                       profile
                     });
@@ -343,9 +342,9 @@ module.exports = {
           criteria.disabled = { $ne: true };
           if ((!connectingUserId) && (spec.login === false)) {
             // Some strategies are only for connecting, not logging in
-            self.logInfo(req, 'strategyNotForLogin', {
+            self.logDebug(req, 'strategyNotForLogin', {
               strategyName: spec.name,
-              profile 
+              profile
             });
             return callback(null, false);
           }
@@ -353,18 +352,18 @@ module.exports = {
             let user;
             const foundUser = await self.apos.user.find(adminReq, criteria).toObject();
             if (foundUser) {
-              self.logInfo(req, 'userFound', {
+              self.logDebug(req, 'userFound', {
                 strategyName: spec.name,
-                profile, 
+                profile,
                 foundUser
               });
               user = foundUser;
             }
             if (!foundUser && self.options.create && !connectingUserId) {
               const createdUser = await self.createUser(spec, profile);
-              self.logInfo(req, 'userCreated', {
+              self.logDebug(req, 'userCreated', {
                 strategyName: spec.name,
-                profile, 
+                profile,
                 createdUser
               });
               user = createdUser;
@@ -395,12 +394,12 @@ module.exports = {
               });
             }
             if (!user) {
-              self.logInfo(req, 'noUserFound', {
+              self.logDebug(req, 'noUserFound', {
                 strategyName: spec.name,
                 profile
               });
             } else {
-              self.logInfo(req, 'findOrCreateUserSuccessful', {
+              self.logDebug(req, 'findOrCreateUserSuccessful', {
                 strategyName: spec.name,
                 profile,
                 user
