@@ -295,7 +295,7 @@ module.exports = {
             if (spec.emailDomain && (!emails.length)) {
               // Email domain filter is in effect and user has no emails or
               // only emails in the wrong domain
-              self.logDebug(req, 'noEmailAndEmailDomainIsSet', {
+              self.logDebug(req, 'noPermittedEmailAddress', {
                 strategyName: spec.name,
                 requiredEmailDomain: spec.emailDomain,
                 profile
