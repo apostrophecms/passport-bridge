@@ -530,9 +530,11 @@ if the strategy name is `github`.
 
 ## Frequently asked questions
 
-### Where do I `require` the passport strategy?
+### Where do I `require` or `import` the passport strategy?
 
-You don't. Apostrophe does it for you. You pass its configuration as part of the `strategies` option, via the `options` sub-property and sometimes also the `authenticate` sub-property if your chosen strategy  has options that must be passed to its `authenticate` middleware, as with Google (you'll see this in its documentation).
+You *can* do that, if you use the `factory` option, as shown above. This is useful with modules that have an unusual initialization process, like `openid-client`.
+
+But in many cases, you don't have to. Apostrophe can do it for you. Passing the module name in the appropriate entry in your `strategies` array is enough. The `options` sub-property and sometimes also the `authenticate` sub-property are useful if your chosen strategy  has options that must be passed to its `authenticate` middleware, as with Google and most others (you'll see this in the documentation of the strategy you are using).
 
 ### Can I change how users are mapped between the identity provider and my site?
 
@@ -602,3 +604,7 @@ Once you have disabled the regular login page, it's possible for you to decide w
 ### What if it doesn't work?
 
 Feel free to open an issue but be sure to provide full specifics and a test project. Note that some strategies may not follow the standard practices this module is built upon. Those written by Jared Hanson, the author of Passport, or following his best practices should work well. You might want to test directly with the sample code provided with that strategy module first, to rule out problems with the module or with your configuration of it.
+
+### How can I debug the system?
+
+By default this module will log quite a bit of information in a development environment, using the `debug` ApostropheCMS log level. When `NODE_ENV` is production this logging is suppressed by default. See the [`@apostrophecms/log` module documentation](https://docs.apostrophecms.org/guide/logging.html) for information how to change this.
