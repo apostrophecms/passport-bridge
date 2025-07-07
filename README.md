@@ -234,7 +234,7 @@ export default {
             // injected into params by passport-bridge
             callbackURL
           } = params;
-          const s = new Strategy({
+          const strategy = new Strategy({
             config,
             scope: 'openid email',
             callbackURL
