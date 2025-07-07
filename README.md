@@ -253,8 +253,8 @@ export default {
           });
 
           // The strategy sets it to the hostname, which varies. Override so we can predict the URLs
-          s.name = 'oidc';
-          return s;
+          strategy.name = 'oidc';
+          return strategy;
         },
         // Also required when using a factory function
         name: 'oidc',
