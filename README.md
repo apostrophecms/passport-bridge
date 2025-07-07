@@ -87,13 +87,13 @@ module.exports = {
 > `match` option. If you want to automatically create users in Apostrophe,
 > see [creating users on demand](#creating-users-on-demand) below.
 
-### Customizing call to the strategy verify method
+### Working with passport strategies that expect different arguments to the `verify` callback
 
-All passport strategies expect us to provide a `verify` callback. By default, `@apostrophecms/passport-bridge` passes its `findOrCreateUser` function as the `verify` callback, which works for many strategies including `passport-oauth2`, `passport-github2` and `passport-gitlab2`. For other strategies, you can pass an explicit `verify` option which will remap the strategy `verify` method with `@apostrophecms/passport-bridge` `findOrCreateUser` method.
+All passport strategies expect us to provide a `verify` callback. By default, `@apostrophecms/passport-bridge` passes its `findOrCreateUser` function as the `verify` callback, which works for many strategies including `passport-oauth2`, `passport-github2` and `passport-gitlab2`. For other strategies, you can pass an explicit `verify` option which will remap the strategy `verify` method to our `@apostrophecms/passport-bridge` `findOrCreateUser` method.
 
 This method is responsible for retrieving the user in the ApostropheCMS database, or creating it. It is the `@apostrophecms/passport-bridge` equivalent of the strategy `verify` method.
 
-For example in `passport-oauth2`, the documentation shows the following
+For example, for `passport-oauth2`, the module's documentation shows the following:
 
 ```javascript
 // https://www.passportjs.org/packages/passport-oauth2/
@@ -140,6 +140,8 @@ module.exports = {
 
 If you're using `passport-auth0` or any other auth strategy for which the strategy `verify` method is different, please use the new `@apostrophecms/passport-bridge` `verify` option.
 
+For instance, the `passport-auth0` module has a `verify` method that expects different arguments:
+
 ```javascript
 // https://www.passportjs.org/packages/passport-auth0/
 const Auth0Strategy = require('passport-auth0');
@@ -153,7 +155,7 @@ const strategy = new Auth0Strategy({
 );
 ```
 
-To solve this, you can do the following
+To solve for this, you can do the following:
 
 ```javascript
 module.exports = {
@@ -176,11 +178,97 @@ module.exports = {
 };
 ```
 
-`verify` is a function with a single parameter `findOrCreateUser`. `self.findOrCreateUser(spec)` will be passed to your verify function as the `findOrCreateUser` argument.
+If provided, the `verify` option must be a function.
 
-Your `verify` function should return an async function which accepts `req` plus all of the `verify` parameters your particular strategy expects.
+That function accepts the normal verify callback from the passport bridge module, and returns an alternative function which accepts `req`, plus the arguments that are typical for `passport-auth0` or the strategy of your choice, and then invokes the normal verify callback with the arguments it expects, returning the result.
 
-That function, in turn, return the result of `findOrCreateUser` with the appropriate parameter mapping for `accessToken`, `refreshToken`, `profile` and `done`.
+### Working with `oidc-client` and other passport strategies that don't follow typical patterns
+
+Some passport strategies are more challenging than others. In particular, OIDC is best implemented with the [oidc-client](https://www.npmjs.com/package/oidc-client) module, but there are several challenges:
+
+* Because of the way it is exported, the strategy cannot simply be `require`d for you by passport-bridge.
+* The strategy does not accept a simple object of parameters for initialization.
+* You will likely want to use the built-in discovery feature.
+* The `verify` function has a different pattern.
+* OIDC's standard "claims" are named differently from the profile properties commonly seen with oauth2-based strategies.
+
+To solve for all of these, use the `factory` option. Here is a complete solution for `oidc-client`.
+
+First, make sure you have the prerequisites:
+
+* `npm install openid-client`
+* `npm install @apostrophecms/passport-bridge`
+* Add `@apostrophecms/passport-bridge: {}` to your `modules` section in `app.js`
+* Set the `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` environment variables
+
+*Note that `OIDC_ISSUER` should be the URL of an identity provider that supports OIDC discovery, which most
+OIDC providers do.*
+
+Now configure the passport bridge module:
+
+```javascript
+// in modules/@apostrophecms/passport-bridge/index.js of your project
+// (do NOT modify the module in node_modules)
+
+import * as client from 'openid-client';
+import {
+  Strategy
+} from 'openid-client/passport'
+
+export default {
+  options: {
+    // Optional
+    create: {
+      role: 'guest'
+    },
+    strategies: [
+      {
+        async factory(params, fn) {
+          const issuer = new URL(process.env.OIDC_ISSUER);
+          const config = await client.discovery(
+            issuer,
+            process.env.OIDC_CLIENT_ID,
+            process.env.OIDC_CLIENT_SECRET
+          );
+          const {
+            // injected into params by passport-bridge
+            callbackURL
+          } = params;
+          const strategy = new Strategy({
+            config,
+            scope: 'openid email',
+            callbackURL
+          }, (tokens, callback) => {
+            const claims = tokens.claims();
+
+            const profile = {
+              id: claims.sid,
+              displayName: claims.name,
+              firstName: claims.given_name,
+              lastName: claims.family_name,
+              email: claims.email,
+              username: claims.preferred_username
+            };
+            return fn(null, tokens.access_token, tokens.refresh_token, profile, callback);
+          });
+
+          // The strategy sets it to the hostname, which varies. Override so we can predict the URLs
+          strategy.name = 'oidc';
+          return strategy;
+        },
+        // Also required when using a factory function
+        name: 'oidc',
+        // These would show up in "params" above, we chose to use environment
+        // variables instead
+        options: {},
+        // Use the user's email address as their identity. You
+        // could also specify 'id', or 'username' if the latter is unique
+        match: 'email'
+      }
+    ]
+  }
+}
+```
 
 ### Adding login links
 
@@ -260,8 +348,7 @@ You may enable more than one strategy at the same time. Just configure them cons
 When we authenticate the user via an identity provider like `github` that has APIs
 of its own, it is often desirable to call additional APIs of that provider.
 
-Setting the `retainAccessToken` option to `true` retains the `accessToken` and `refreshToken` in Apostrophe's
-"safe," which is a special storage place for sensitive data associated with a user.
+Setting the `retainAccessToken` option to `true` retains the `accessToken` and `refreshToken` in Apostrophe's "safe," which is a special storage place for sensitive data associated with a user.
 
 You can then access that data like this:
 
@@ -283,7 +370,7 @@ There is no guarantee that a particular strategy supports tokens, or requires bo
 `accessToken` and `refreshToken`.
 
 Access tokens can expire. If the access token expires and the strategy you are using
-supports OAuth refresh tokens, you can ask Apostrophe to refresh it:
+supports OAuth refresh tokens (not OIDC), you can ask Apostrophe to refresh it:
 
 ```javascript
 // Passing in the existing refresh token is optional, but avoids an extra database call
@@ -443,9 +530,11 @@ if the strategy name is `github`.
 
 ## Frequently asked questions
 
-### Where do I `require` the passport strategy?
+### Where do I `require` or `import` the passport strategy?
 
-You don't. Apostrophe does it for you. You pass its configuration as part of the `strategies` option, via the `options` sub-property and sometimes also the `authenticate` sub-property if your chosen strategy  has options that must be passed to its `authenticate` middleware, as with Google (you'll see this in its documentation).
+You *can* do that, if you use the `factory` option, as shown above. This is useful with modules that have an unusual initialization process, like `openid-client`.
+
+But in many cases, you don't have to. Apostrophe can do it for you. Passing the module name in the appropriate entry in your `strategies` array is enough. The `options` sub-property and sometimes also the `authenticate` sub-property are useful if your chosen strategy  has options that must be passed to its `authenticate` middleware, as with Google and most others (you'll see this in the documentation of the strategy you are using).
 
 ### Can I change how users are mapped between the identity provider and my site?
 
@@ -515,3 +604,7 @@ Once you have disabled the regular login page, it's possible for you to decide w
 ### What if it doesn't work?
 
 Feel free to open an issue but be sure to provide full specifics and a test project. Note that some strategies may not follow the standard practices this module is built upon. Those written by Jared Hanson, the author of Passport, or following his best practices should work well. You might want to test directly with the sample code provided with that strategy module first, to rule out problems with the module or with your configuration of it.
+
+### How can I debug the system?
+
+By default this module will log quite a bit of information in a development environment, using the `debug` ApostropheCMS log level. When `NODE_ENV` is production this logging is suppressed by default. See the [`@apostrophecms/log` module documentation](https://docs.apostrophecms.org/guide/logging.html) for information how to change this.

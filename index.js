@@ -33,23 +33,30 @@ module.exports = {
           throw new Error('@apostrophecms/passport-bridge: you must configure the "strategies" option');
         }
 
-        for (const strategy of self.options.strategies) {
-          const spec = klona(strategy);
+        for (let spec of self.options.strategies) {
+          spec = klona(spec);
           // Works with npm modules that export the strategy directly, npm modules
           // that export a Strategy property, and directly passing in a strategy property
           // in the spec
           const strategyModule = spec.module && await import(spec.module);
-          const Strategy = strategyModule
-            ? (strategyModule.Strategy || strategyModule)
-            : spec.Strategy;
-          if (!Strategy) {
-            throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
-              'giving the name of an npm module installed in your project that\n' +
-              'is passport-oauth2, passport-oauth or a subclass with a compatible\n' +
-              'interface, such as passport-gitlab2, passport-twitter, etc.\n\n' +
-              'You may instead pass a strategy constructor as a Strategy property,\n' +
-              'but the other way is much more convenient.');
-          }
+
+          const factory = spec.factory || ((...args) => {
+            const Strategy = strategyModule
+              ? (strategyModule.Strategy || strategyModule)
+              : spec.Strategy;
+            if (!Strategy) {
+              throw new Error('@apostrophecms/passport-bridge: each strategy must have a "module" setting\n' +
+                'giving the name of an npm module installed in your project such\n' +
+                'as passport-oauth2, passport-oauth or a subclass with a compatible\n' +
+                'interface, such as passport-gitlab2, passport-twitter, etc.\n\n' +
+                'You may instead pass a "factory" async function that takes the configuration and\n' +
+                'returns a strategy object.\n\nFinally, for bc, you may pass a strategy constructor as a\n' +
+                'Strategy property.\n\nThe factory function is the most flexible option.'
+              );
+            }
+            return new Strategy(...args);
+          });
+
           // Are there strategies requiring no options? Probably not, but maybe...
           spec.options = spec.options || {};
           const scope = spec.options.scope || spec?.authenticate?.scope;
@@ -78,8 +85,8 @@ module.exports = {
             // It's hard to find the strategy name; it's not the same
             // as the npm name. And we need it to build the callback URL
             // sensibly. But we can do it by making a dummy strategy object now
-            const dummy = new Strategy({
-              callbackURL: 'https://dummy/test',
+            const dummy = await factory({
+              callbackURL: 'https://dummy.localhost/test',
               passReqToCallback: true,
               ...spec.options
             }, verify(self.findOrCreateUser(spec)));
@@ -88,12 +95,16 @@ module.exports = {
           spec.label = spec.label || spec.name;
           spec.options.callbackURL = self.getCallbackUrl(spec, true);
           self.specs[spec.name] = spec;
-          self.strategies[spec.name] = new Strategy({
+          const strategy = await factory({
             passReqToCallback: true,
             ...spec.options
           }, verify(self.findOrCreateUser(spec)));
-          self.apos.login.passport.use(self.strategies[spec.name]);
-          self.refresh.use(self.strategies[spec.name]);
+          self.strategies[spec.name] = strategy;
+          self.apos.login.passport.use(strategy);
+          if (strategy._oauth2) {
+            // This will only work with strategies that actually have an _oauth2 object
+            self.refresh.use(self.strategies[spec.name]);
+          }
         };
       },
 
@@ -265,6 +276,10 @@ module.exports = {
 
           if (spec.accept) {
             if (!spec.accept(profile)) {
+              self.logDebug(req, 'rejectedProfile', {
+                strategyName: spec.name,
+                profile
+              });
               return callback(null, false);
             }
           }
@@ -277,6 +292,11 @@ module.exports = {
             if (spec.emailDomain && (!emails.length)) {
               // Email domain filter is in effect and user has no emails or
               // only emails in the wrong domain
+              self.logDebug(req, 'noPermittedEmailAddress', {
+                strategyName: spec.name,
+                requiredEmailDomain: spec.emailDomain,
+                profile
+              });
               return callback(null, false);
             }
             if (typeof (spec.match) === 'function') {
@@ -300,7 +320,11 @@ module.exports = {
                 case 'email':
                 case 'emails':
                   if (!emails.length) {
-                  // User has no email
+                    // User has no email
+                    self.logDebug(req, 'noEmailAndEmailIsId', {
+                      strategyName: spec.name,
+                      profile
+                    });
                     return callback(null, false);
                   }
                   criteria.$or = emails.map(email => {
@@ -315,15 +339,32 @@ module.exports = {
           criteria.disabled = { $ne: true };
           if ((!connectingUserId) && (spec.login === false)) {
             // Some strategies are only for connecting, not logging in
+            self.logDebug(req, 'strategyNotForLogin', {
+              strategyName: spec.name,
+              profile
+            });
             return callback(null, false);
           }
           try {
-            const user = await self.apos.user.find(adminReq, criteria).toObject() ||
-              (
-                self.options.create &&
-                !connectingUserId &&
-                await self.createUser(spec, profile)
-              );
+            let user;
+            const foundUser = await self.apos.user.find(adminReq, criteria).toObject();
+            if (foundUser) {
+              self.logDebug(req, 'userFound', {
+                strategyName: spec.name,
+                profile,
+                foundUser
+              });
+              user = foundUser;
+            }
+            if (!foundUser && self.options.create && !connectingUserId) {
+              const createdUser = await self.createUser(spec, profile);
+              self.logDebug(req, 'userCreated', {
+                strategyName: spec.name,
+                profile,
+                createdUser
+              });
+              user = createdUser;
+            }
             // Legacy, incompatible with Passport 0.6
             if (self.options.retainAccessTokenInSession && user && req) {
               req.session.accessToken = accessToken;
@@ -347,6 +388,18 @@ module.exports = {
                 $set: {
                   [`${spec.name}Id`]: profile.id
                 }
+              });
+            }
+            if (!user) {
+              self.logDebug(req, 'noUserFound', {
+                strategyName: spec.name,
+                profile
+              });
+            } else {
+              self.logDebug(req, 'findOrCreateUserSuccessful', {
+                strategyName: spec.name,
+                profile,
+                user
               });
             }
             return callback(null, user || false);
