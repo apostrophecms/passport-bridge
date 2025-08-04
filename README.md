@@ -314,39 +314,7 @@ integrations: [
 
 This ensures all authentication-related routes (such as `/auth/google/login`, `/auth/github/login`, `/auth/gitlab/callback`, etc.) are properly forwarded to your ApostropheCMS backend.
 
-**2. Create a Login API Module**
-
-Create a dedicated API route in your ApostropheCMS project to expose the login links:
-
-```javascript
-// backend/modules/login-api/index.js
-export default {
-  apiRoutes(self) {
-    return {
-      get: {
-        async loginLinks(req) {
-          const bridge = self.apos.modules['@apostrophecms/passport-bridge'];
-          if (!bridge) {
-            return [];
-          }
-
-          return Object.values(bridge.specs).map(spec => {
-            const href = bridge.getLoginUrl(spec, true);
-            return {
-              name: spec.name,
-              label: spec.label,
-              href
-            };
-          });
-        }
-      }
-    };
-  }
-};
-```
-Remember to register this new module in the `app.js` file.
-
-**3. Configure Passport Bridge with Redirects**
+**2. Configure Passport Bridge with Redirects**
 
 Update your passport bridge configuration to handle successful and failed authentication redirects to your Astro frontend. The key addition is the `successRedirect` and `failureRedirect` properties in the authenticate section:
 
@@ -367,8 +335,8 @@ export default {
         authenticate: {
           scope: ['email', 'profile'],
           // These redirects are crucial for Astro integration:
-          successRedirect: process.env.FRONTEND_URL || 'http://localhost:4321/',
-          failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:4321'}/login?error=oauth_failed`
+          successRedirect: process.env.APOS_BASE_URL || 'http://localhost:4321/',
+          failureRedirect: `${process.env.APOS_BASE_URL || 'http://localhost:4321'}/login?error=oauth_failed`
         }
       }
     ]
@@ -376,71 +344,21 @@ export default {
 };
 ```
 
-> Note: Unlike the traditional ApostropheCMS `loginLinks` component which redirect users back to their original page, with a separate Astro frontend you'll need to specify fixed redirect URLs. You can make these URLs dynamic by using environment variables or by implementing additional logic in your authentication flow.
+**3. Add a login link to your frontend template**
 
-**4. Create the Astro Login Component**
+In the backend portion of the project use the CLI task to list the configured authentication URLs.
 
-Create an Astro component to fetch and display the login links:
-
-```javascript
----
-// frontend/src/components/LoginLinks.astro
-interface LoginLink {
-  name: string;
-  label: string;
-  href: string;
-}
-
-let loginLinks: LoginLink[] = [];
-
-try {
-  const aposHost = import.meta.env.APOS_HOST || 'http://localhost:3000';
-
-  const apiUrl = new URL('/api/v1/login-api/login-links', aposHost);
-
-  const response = await fetch(apiUrl.toString());
-  if (response.ok) {
-    loginLinks = await response.json();
-  }
-} catch (error) {
-  console.error('Failed to fetch login links:', error);
-}
----
-
-<div class="login-links">
-  {loginLinks.length > 0 ? (
-    loginLinks.map(link => (
-      <a href={link.href} class="login-link">
-        Login with {link.label}
-      </a>
-    ))
-  ) : (
-    <p>No login providers configured</p>
-  )}
-</div>
+```bash
+node app @apostrophecms/passport-bridge:listUrls
 ```
-
-**5. Use the Component in Your Pages**
-
-Now you can use the `LoginLinks` component anywhere in your Astro pages:
-
-```javascript
----
-// src/pages/login.astro
-import LoginLinks from '../components/LoginLinks.astro';
----
-<section>
-  <h1>Sign In</h1>
-  <LoginLinks />
-</section>
-```
+This will provide the URL (or multiple URLs if you have multiple strategies defined) that you can add to your desired frontend template.
 
 ## Environment Variables
 
 Make sure to set the following environment variables:
 
 - `APOS_HOST`: Your ApostropheCMS backend URL (e.g., `http://localhost:3000`)
-- `FRONTEND_URL`: Your Astro frontend URL (e.g., `http://localhost:4321`)
+- `APOS_BASE_URL`: Your Astro frontend URL (e.g., `http://localhost:4321`)
 - Strategy-specific variables like `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 
 ## Handling Authentication State
@@ -450,52 +368,6 @@ After successful authentication, users will be redirected to your Astro frontend
 ## Error Handling
 
 The `failureRedirect` configuration will send users to your specified error page (e.g., `/login?error=oauth_failed`) where you can display appropriate error messages based on URL parameters.
-
-## Multiple Strategies
-
-This setup works with multiple authentication strategies. Simply add additional strategy configurations to your `strategies` array, and the `LoginLinks` component will automatically display all available options.
-
-## Internationalization Support
-
-If you're using ApostropheCMS's internationalization features, you can enhance the login API to handle locale-aware redirects:
-
-```javascript
-// Enhanced version with i18n support
-export default {
-  apiRoutes(self) {
-    return {
-      get: {
-        async loginLinks(req) {
-          const bridge = self.apos.modules['@apostrophecms/passport-bridge'];
-          if (!bridge) {
-            return [];
-          }
-
-          return Object.values(bridge.specs).map(spec => {
-            let href = bridge.getLoginUrl(spec, true);
-            
-            // Handle i18n if multiple locales are configured
-            if (Object.keys(self.apos.i18n.locales).length > 1) {
-              const context = req.data.piece || req.data.page;
-              href = self.apos.url.build(href, {
-                oldLocale: req.locale,
-                newLocale: req.locale.replace(':draft', ':published'),
-                oldAposDocId: (context && context.aposDocId)
-              });
-            }
-
-            return {
-              name: spec.name,
-              label: spec.label,
-              href
-            };
-          });
-        }
-      }
-    };
-  }
-};
-```
 
 ### Configuring your identity provider
 
