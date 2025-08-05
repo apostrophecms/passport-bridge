@@ -5,10 +5,7 @@
   <p>
     <a aria-label="Apostrophe logo" href="https://v3.docs.apostrophecms.org">
       <img src="https://img.shields.io/badge/MADE%20FOR%20ApostropheCMS-000000.svg?style=for-the-badge&logo=Apostrophe&labelColor=6516dd">
-    </a>
-    <a aria-label="Test status" href="https://github.com/apostrophecms/passport-bridge/actions">
-      <img alt="GitHub Workflow Status (branch)" src="https://img.shields.io/github/workflow/status/apostrophecms/passport-bridge/Tests/main?label=Tests&labelColor=000000&style=for-the-badge">
-    </a>
+    </a><img src="https://img.shields.io/badge/ASTRO%20READY-FF5D01.svg?style=for-the-badge&logo=Astro&labelColor=000000" alt="Astro Ready">
     <a aria-label="Join the community on Discord" href="http://chat.apostrophecms.org">
       <img alt="" src="https://img.shields.io/discord/517772094482677790?color=5865f2&label=Join%20the%20Discord&logo=discord&logoColor=fff&labelColor=000&style=for-the-badge&logoWidth=20">
     </a>
@@ -18,15 +15,24 @@
   </p>
 </div>
 
-`apostrophe-passport` works together with `passport-google-oauth20`, `passport-gitlab2` and similar [passport](https://npmjs.org/package/passport) strategy modules to let users log in to Apostrophe CMS sites via Google, Gitlab and other identity providers. This feature is often called federation or single sign-on.
+**Enable enterprise-grade single sign-on (SSO) and social login** for your ApostropheCMS applications. Seamlessly integrate with Google Workspace, GitHub, GitLab, Auth0, and dozens of other identity providers to streamline user authentication and improve security.
+
+## Why Passport Bridge?
+
+- **🔐 Enterprise Security**: Leverage your existing identity infrastructure (Google Workspace, Azure AD, Okta)
+- **⚡ Zero Password Fatigue**: Users log in once with credentials they already know and trust
+- **🛡️ Reduced Security Risk**: Eliminate password storage and management on your site
+- **👥 Team-Ready**: Perfect for organizations where users already have company accounts
+- **🚀 Developer Friendly**: Works with 500+ [Passport.js strategies](https://www.passportjs.org/) with minimal configuration
+- **💰 Cost Effective**: Reduce support overhead from password resets and account management
 
 ## Installation
 
 To install the module, use the command line to run this command in an Apostrophe project's root directory:
 
-```
+```bash
 npm install @apostrophecms/passport-bridge
-# Just an example — you can use many strategy modules
+# Example: Google OAuth (many other providers available)
 npm install --save passport-google-oauth20
 ```
 
@@ -37,8 +43,10 @@ Most modules that have "passport" in the name and let you log in via a third-par
 Enable the `@apostrophecms/passport-bridge` module in the `app.js` file:
 
 ```javascript
+import apostrophe from 'apostrophe';
 
-require('apostrophe')({
+apostrophe ({
+  root: import.meta,
   // Configuring baseUrl is mandatory for this module. For local dev
   // testing you can set it to http://localhost:3000 while in production
   // it must be real and correct
@@ -53,7 +61,7 @@ require('apostrophe')({
 Then configure the module in `modules/@apostrophecms/passport-bridge/index.js` in your project folder:
 
 ```javascript
-module.exports = {
+export default {
   // In modules/@apostrophecms/passport-bridge/index.js
   options: {
     strategies: [
@@ -270,7 +278,7 @@ export default {
 }
 ```
 
-### Adding login links
+### Adding login links for a traditional ApostropheCMS project
 
 The easiest way to enable login is to use the `loginLinks` async component in your template:
 
@@ -283,6 +291,83 @@ This component will output links that attempt to bring the user back to the same
 You can override this template's markup by copying `views/loginLinks.html` from this npm module to your project-level `modules/@apostrophecms/passport-bridge/views` folder.
 
 You can also determine the login URLs by invoking the `@apostrophecms/passport-bridge:list-urls` task, however this method does not give you a way to preserve the current URL or redirect back to the current locale's hostname.
+
+### Using login links with headless ApostropheCMS and an Astro Frontend
+
+When using `@apostrophecms/passport-bridge` with an Astro frontend (via [`@apostrophecms/apostrophe-astro`](https://github.com/apostrophecms/apostrophe-astro)), the built-in `loginLinks` component won't work since Astro handles template rendering instead of Nunjucks.
+
+**1. Configure Astro Proxy Routes**
+
+First, configure your Astro frontend to proxy authentication routes to ApostropheCMS. In your `astro.config.mjs` within the `apostrophe` configuration:
+
+```javascript
+integrations: [
+  apostrophe({
+    aposHost: 'http://localhost:3000',
+    proxyRoutes: [
+      '/auth/[...slug]'
+    ]
+    // remainder of configuration
+  })
+]
+```
+
+This ensures all authentication-related routes (such as `/auth/google/login`, `/auth/github/login`, `/auth/gitlab/callback`, etc.) are properly forwarded to your ApostropheCMS backend.
+
+**2. Configure Passport Bridge with Redirects**
+
+Update your passport bridge configuration to handle successful and failed authentication redirects to your Astro frontend. The key addition is the `successRedirect` and `failureRedirect` properties in the authenticate section:
+
+```javascript
+// backend/modules/@apostrophecms/passport-bridge/index.js
+export default {
+  options: {
+    strategies: [
+      {
+        // Example with Google OAuth - adapt for your chosen strategy
+        module: 'passport-google-oauth20',
+        options: {
+          clientID: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          callbackURL: `${process.env.APOS_HOST || 'http://localhost:3000'}/auth/google/callback`
+        },
+        match: 'email',
+        authenticate: {
+          scope: ['email', 'profile'],
+          // These redirects are crucial for Astro integration:
+          successRedirect: process.env.APOS_BASE_URL || 'http://localhost:4321/',
+          failureRedirect: `${process.env.APOS_BASE_URL || 'http://localhost:4321'}/login?error=oauth_failed`
+        }
+      }
+    ]
+  }
+};
+```
+
+**3. Add a login link to your frontend template**
+
+In the backend portion of the project use the CLI task to list the configured authentication URLs.
+
+```bash
+node app @apostrophecms/passport-bridge:listUrls
+```
+This will provide the URL (or multiple URLs if you have multiple strategies defined) that you can add to your desired frontend component.
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+- `APOS_HOST`: Your ApostropheCMS backend URL (e.g., `http://localhost:3000`)
+- `APOS_BASE_URL`: Your Astro frontend URL (e.g., `http://localhost:4321`)
+- Strategy-specific variables like `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+
+## Handling Authentication State
+
+After successful authentication, users will be redirected to your Astro frontend. You can check authentication state by making requests to your ApostropheCMS backend's session endpoints or by implementing additional API routes to expose user information.
+
+## Error Handling
+
+The `failureRedirect` configuration will send users to your specified error page (e.g., `/login?error=oauth_failed`) where you can display appropriate error messages based on URL parameters.
 
 ### Configuring your identity provider
 
@@ -484,7 +569,7 @@ await self.apos.user.requestConnection(req, 'STRATEGY NAME HERE', {
 
 4. The user is redirected to authorize access to their `github` account (in this example).
 
-5. The user is redirectd to the home page, or to the URL you optionally specify via
+5. The user is redirected to the home page, or to the URL you optionally specify via
 `redirectTo`. They are still logged into the original account. Their strategy-specific id
 is captured in their `user` piece as `githubId` (in the case of the github strategy;
 substitute the appropriate strategy name), and their tokens are available as described
@@ -608,3 +693,10 @@ Feel free to open an issue but be sure to provide full specifics and a test proj
 ### How can I debug the system?
 
 By default this module will log quite a bit of information in a development environment, using the `debug` ApostropheCMS log level. When `NODE_ENV` is production this logging is suppressed by default. See the [`@apostrophecms/log` module documentation](https://docs.apostrophecms.org/guide/logging.html) for information how to change this.
+
+---
+
+<div>
+  <p>Made with ❤️ by the <a href="https://apostrophecms.com">ApostropheCMS</a> team. <strong>Found this useful? <a href="https://github.com/apostrophecms/passport-bridge">Give us a star on GitHub!</a> ⭐</strong>
+  </p>
+</div>
