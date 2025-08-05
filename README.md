@@ -351,7 +351,7 @@ In the backend portion of the project use the CLI task to list the configured au
 ```bash
 node app @apostrophecms/passport-bridge:listUrls
 ```
-This will provide the URL (or multiple URLs if you have multiple strategies defined) that you can add to your desired frontend template.
+This will provide the URL (or multiple URLs if you have multiple strategies defined) that you can add to your desired frontend component.
 
 ## Environment Variables
 
