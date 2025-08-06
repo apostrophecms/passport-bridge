@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 (2025-08-06)
+
+* README changes only.
+
 ## 1.5.0 (2025-07-09)
 
 * See 1.5.0-beta.1, below. Those changes are now official in 1.5.0.
