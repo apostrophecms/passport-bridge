@@ -276,7 +276,7 @@ module.exports = {
 
           if (spec.accept) {
             if (!spec.accept(profile)) {
-              self.logDebug(req, 'rejectedProfile', {
+              self.logDebug('rejectedProfile', {
                 strategyName: spec.name,
                 profile
               });
@@ -292,7 +292,7 @@ module.exports = {
             if (spec.emailDomain && (!emails.length)) {
               // Email domain filter is in effect and user has no emails or
               // only emails in the wrong domain
-              self.logDebug(req, 'noPermittedEmailAddress', {
+              self.logDebug('noPermittedEmailAddress', {
                 strategyName: spec.name,
                 requiredEmailDomain: spec.emailDomain,
                 profile
@@ -321,7 +321,7 @@ module.exports = {
                 case 'emails':
                   if (!emails.length) {
                     // User has no email
-                    self.logDebug(req, 'noEmailAndEmailIsId', {
+                    self.logDebug('noEmailAndEmailIsId', {
                       strategyName: spec.name,
                       profile
                     });
@@ -339,7 +339,7 @@ module.exports = {
           criteria.disabled = { $ne: true };
           if ((!connectingUserId) && (spec.login === false)) {
             // Some strategies are only for connecting, not logging in
-            self.logDebug(req, 'strategyNotForLogin', {
+            self.logDebug('strategyNotForLogin', {
               strategyName: spec.name,
               profile
             });
@@ -349,7 +349,7 @@ module.exports = {
             let user;
             const foundUser = await self.apos.user.find(adminReq, criteria).toObject();
             if (foundUser) {
-              self.logDebug(req, 'userFound', {
+              self.logDebug('userFound', {
                 strategyName: spec.name,
                 profile,
                 foundUser
@@ -358,7 +358,7 @@ module.exports = {
             }
             if (!foundUser && self.options.create && !connectingUserId) {
               const createdUser = await self.createUser(spec, profile);
-              self.logDebug(req, 'userCreated', {
+              self.logDebug('userCreated', {
                 strategyName: spec.name,
                 profile,
                 createdUser
@@ -391,12 +391,12 @@ module.exports = {
               });
             }
             if (!user) {
-              self.logDebug(req, 'noUserFound', {
+              self.logDebug('noUserFound', {
                 strategyName: spec.name,
                 profile
               });
             } else {
-              self.logDebug(req, 'findOrCreateUserSuccessful', {
+              self.logDebug('findOrCreateUserSuccessful', {
                 strategyName: spec.name,
                 profile,
                 user
@@ -486,15 +486,15 @@ module.exports = {
         const user = self.apos.user.newInstance();
         user.role = await self.userRole();
         user.username = profile.username;
-        user.title = profile.displayName || profile.username || '';
         user[spec.name + 'Id'] = profile.id;
-        if (!user.username) {
-          user.username = self.apos.util.slugify(user.title);
-        }
         const emails = self.getRelevantEmailsFromProfile(spec, profile);
         if (emails.length) {
           user.email = emails[0];
         }
+        // Try hard to come up with a title, as without a slug we'll get an error
+        // at insert time
+        user.title = profile.displayName || profile.username || user.email || '';
+        user.username = user.username || user.email || self.apos.util.slugify(user.title);
         if (profile.name) {
           user.firstName = profile.name.givenName;
           if (profile.name.middleName) {

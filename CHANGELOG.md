@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.2 (2025-08-27)
+
+* Fixed regression introduced in 1.5.0-beta.1 that made it more difficult to see the logs regarding certain types of login failures and account creation issues. This issue was particularly likely to occur with strategies that do not supply `req`.
+* Works correctly out of the box when only `email` is available in the profile, e.g. when the user's full name or username is not available, as can happen when an idP is configured to provide an absolute minimum of information.
+
 ## 1.5.1 (2025-08-06)
 
 * README changes only.
