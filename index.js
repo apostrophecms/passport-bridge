@@ -491,7 +491,8 @@ module.exports = {
         if (emails.length) {
           user.email = emails[0];
         }
-        // Try hard to come up with a title, as without a slug we'll get an error at insert time
+        // Try hard to come up with a title, as without a slug we'll get an error
+        // at insert time
         user.title = profile.displayName || profile.username || user.email || '';
         user.username = user.username || user.email || self.apos.util.slugify(user.title);
         if (profile.name) {
