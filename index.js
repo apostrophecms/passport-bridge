@@ -486,15 +486,14 @@ module.exports = {
         const user = self.apos.user.newInstance();
         user.role = await self.userRole();
         user.username = profile.username;
-        user.title = profile.displayName || profile.username || '';
         user[spec.name + 'Id'] = profile.id;
-        if (!user.username) {
-          user.username = self.apos.util.slugify(user.title);
-        }
         const emails = self.getRelevantEmailsFromProfile(spec, profile);
         if (emails.length) {
           user.email = emails[0];
         }
+        // Try hard to come up with a title, as without a slug we'll get an error at insert time
+        user.title = profile.displayName || profile.username || user.email || '';
+        user.username = user.username || user.email || self.apos.util.slugify(user.title);
         if (profile.name) {
           user.firstName = profile.name.givenName;
           if (profile.name.middleName) {
