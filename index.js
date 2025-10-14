@@ -315,7 +315,9 @@ module.exports = {
                     self.apos.util.error('@apostrophecms/passport-bridge: profile has no username. You probably want to set the "match" option for this strategy to "id" or "email".');
                     return callback(null, false);
                   }
-                  criteria.username = profile.username;
+                  criteria.username = self.apos.login.normalizeLoginName(
+                    profile.username
+                  );
                   break;
                 case 'email':
                 case 'emails':
@@ -328,7 +330,9 @@ module.exports = {
                     return callback(null, false);
                   }
                   criteria.$or = emails.map(email => {
-                    return { email };
+                    return {
+                      email: self.apos.login.normalizeLoginName(email)
+                    };
                   });
                   break;
                 default:
@@ -485,15 +489,15 @@ module.exports = {
       async createUser(spec, profile) {
         const user = self.apos.user.newInstance();
         user.role = await self.userRole();
-        user.username = profile.username;
+        user.username = self.apos.login.normalizeLoginName(profile.username);
         user[spec.name + 'Id'] = profile.id;
-        const emails = self.getRelevantEmailsFromProfile(spec, profile);
-        if (emails.length) {
-          user.email = emails[0];
+        const [ email ] = self.getRelevantEmailsFromProfile(spec, profile);
+        if (email) {
+          user.email = self.apos.login.normalizeLoginName(email);
         }
         // Try hard to come up with a title, as without a slug we'll get an error
         // at insert time
-        user.title = profile.displayName || profile.username || user.email || '';
+        user.title = profile.displayName || profile.username || email || '';
         user.username = user.username || user.email || self.apos.util.slugify(user.title);
         if (profile.name) {
           user.firstName = profile.name.givenName;
