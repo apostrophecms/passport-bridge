@@ -1,5 +1,11 @@
 # Changelog
 
+## UNRELEASED
+
+### Adds
+
+* Uses core login `normalizeLoginName` method to lowercase username and email in case project login option `caseInsensitive` is set to true.
+
 ## 1.5.2 (2025-08-27)
 
 * Fixed regression introduced in 1.5.0-beta.1 that made it more difficult to see the logs regarding certain types of login failures and account creation issues. This issue was particularly likely to occur with strategies that do not supply `req`.
