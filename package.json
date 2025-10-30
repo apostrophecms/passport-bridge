@@ -1,6 +1,6 @@
 {
   "name": "@apostrophecms/passport-bridge",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "description": "Passport.js authentication for Apostrophe",
   "main": "index.js",
   "scripts": {
